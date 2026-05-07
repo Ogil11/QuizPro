@@ -1,0 +1,104 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/quiz_pro_adaptative_learning/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String?
+  name          String?
+  image         String?
+  // OAuth (Google) - prepared, TODO: feature/auth
+  provider      String?        @default("credentials")
+  providerId    String?
+  // Roble integration
+  robleUserId   String?
+  robleToken    String?
+  isAdmin       Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  quizzes       Quiz[]
+  attempts      QuizAttempt[]
+  documents     Document[]
+  feedbacks     UserFeedback[]
+}
+
+model Quiz {
+  id           String      @id @default(cuid())
+  name         String
+  description  String?
+  category     String
+  difficulty   String      // easy | medium | hard
+  isPublic     Boolean     @default(false)
+  creationMode String      @default("manual") // manual | ai | mixed
+  creatorId    String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  creator      User        @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  questions    Question[]
+  attempts     QuizAttempt[]
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  quizId        String
+  type          String   // single | multiple | truefalse
+  text          String
+  options       Json     // ["A","B",...]
+  correctAnswers Json    // indices [0] or [0,2]
+  explanation   String?
+  order         Int      @default(0)
+
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  quizId      String
+  score       Float    // 0-100
+  correct     Int
+  total       Int
+  durationSec Int
+  answers     Json     // [{questionId, selected:[idx], correct:boolean, timeMs}]
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+// TODO: feature/content-upload (Sebastián)
+model Document {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  type        String   // pdf | image | link
+  storagePath String?  // S3 cloud_storage_path
+  url         String?
+  extractedText String? @db.Text
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// TODO: feature/ai-feedback (Oscar)
+model UserFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  quizId    String?
+  attemptId String?
+  content   String   @db.Text
+  topics    Json?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
