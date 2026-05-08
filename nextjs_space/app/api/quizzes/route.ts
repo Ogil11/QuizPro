@@ -6,20 +6,24 @@ import { prisma } from "@/lib/db"
 export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  const userId = (session?.user as any)?.id as string | undefined
-  const url = new URL(req.url)
-  const scope = url.searchParams.get("scope") ?? "all" // all | mine | public
-  const where: any = scope === "mine" ? { creatorId: userId ?? "___" }
-    : scope === "public" ? { isPublic: true }
-    : userId ? { OR: [{ isPublic: true }, { creatorId: userId }] } : { isPublic: true }
+  try {
+    const session = await getServerSession(authOptions)
+    const userId = (session?.user as any)?.id as string | undefined
+    const url = new URL(req.url)
+    const scope = url.searchParams.get("scope") ?? "all" // all | mine | public
+    const where: any = scope === "mine" ? { creatorId: userId ?? "___" }
+      : scope === "public" ? { isPublic: true }
+      : userId ? { OR: [{ isPublic: true }, { creatorId: userId }] } : { isPublic: true }
 
-  const quizzes = await prisma.quiz.findMany({
-    where,
-    include: { creator: { select: { name: true, email: true } }, _count: { select: { questions: true, attempts: true } } },
-    orderBy: { createdAt: "desc" },
-  })
-  return NextResponse.json({ quizzes })
+    const quizzes = await prisma.quiz.findMany({
+      where,
+      include: { creator: { select: { name: true, email: true } }, _count: { select: { questions: true, attempts: true } } },
+      orderBy: { createdAt: "desc" },
+    })
+    return NextResponse.json({ quizzes })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "Error cargando quizzes" }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {

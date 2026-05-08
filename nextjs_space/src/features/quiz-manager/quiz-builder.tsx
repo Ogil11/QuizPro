@@ -56,8 +56,14 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: aiTopic, count: aiCount, difficulty }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      const text = await res.text()
+      let data: any = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        data = {}
+      }
+      if (!res.ok) throw new Error(data?.error ?? "Error generando")
       const newQs = (data.questions ?? []) as QuestionDraft[]
       if (mode === "ai") setQuestions(newQs.length ? newQs : [emptyQ()])
       else setQuestions(qs => [...qs.filter(q => q.text), ...newQs])
@@ -74,15 +80,30 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
       }
     }
     setSaving(true)
-    const payload = { name, description, category, difficulty, isPublic, creationMode: mode, questions }
-    const res = await fetch(quizId ? `/api/quizzes/${quizId}` : "/api/quizzes", {
-      method: quizId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
-    })
-    setSaving(false)
-    if (!res.ok) { const d = await res.json(); toast.error(d.error ?? "Error guardando"); return }
-    toast.success("Quiz guardado")
-    router.replace("/dashboard")
+    try {
+      const payload = { name, description, category, difficulty, isPublic, creationMode: mode, questions }
+      const res = await fetch(quizId ? `/api/quizzes/${quizId}` : "/api/quizzes", {
+        method: quizId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        let d: any = {}
+        try {
+          d = text ? JSON.parse(text) : {}
+        } catch {
+          d = {}
+        }
+        toast.error(d?.error ?? "Error guardando")
+        return
+      }
+      toast.success("Quiz guardado")
+      router.replace("/dashboard")
+    } catch {
+      toast.error("Error de conexión al guardar")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

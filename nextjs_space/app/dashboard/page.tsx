@@ -21,10 +21,27 @@ export default function Dashboard() {
 
   async function load() {
     setLoading(true)
-    const res = await fetch(`/api/quizzes?scope=${scope}`)
-    const data = await res.json()
-    setQuizzes(data.quizzes ?? [])
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/quizzes?scope=${scope}`)
+      const text = await res.text()
+      let data: any = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        data = {}
+      }
+      if (!res.ok) {
+        toast.error(data?.error ?? "No se pudieron cargar los quizzes")
+        setQuizzes([])
+        return
+      }
+      setQuizzes(Array.isArray(data?.quizzes) ? data.quizzes : [])
+    } catch {
+      toast.error("No se pudieron cargar los quizzes")
+      setQuizzes([])
+    } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { if (status === "authenticated") load() }, [scope, status])
 
