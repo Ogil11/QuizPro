@@ -57,6 +57,22 @@ function normalizedIds(rows: any[]) {
   }))
 }
 
+function questionRowId(question: any) {
+  return String(val(question, "_id", "id") ?? "")
+}
+
+function questionRecord(quizId: string, question: any, order: number) {
+  return {
+    quizId,
+    type: question.type,
+    text: question.text,
+    options: jsonText(question.options),
+    correctAnswers: jsonText(question.correctAnswers),
+    explanation: question.explanation ?? null,
+    order,
+  }
+}
+
 async function deleteQuestionsForQuiz(quizId: string, token: string) {
   const questionWhere = { quizId }
   debugLog("questions read for delete start", { quizId, tableName: QUESTION_TABLE, where: questionWhere })
@@ -65,7 +81,7 @@ async function deleteQuestionsForQuiz(quizId: string, token: string) {
   if (!qRes.success) return qRes
 
   for (const question of qRes.rows ?? []) {
-    const questionId = String(val(question, "_id", "id") ?? "")
+    const questionId = questionRowId(question)
     if (!questionId) {
       return {
         success: false,
@@ -79,6 +95,57 @@ async function deleteQuestionsForQuiz(quizId: string, token: string) {
     debugLog("question delete start", { quizId, questionId, tableName: QUESTION_TABLE, where })
     const del = await robleDbDelete({ tableName: QUESTION_TABLE, token, where })
     debugLog("question delete result", { quizId, questionId, tableName: QUESTION_TABLE, where, result: del })
+    if (!del.success) return del
+  }
+
+  return { success: true }
+}
+
+async function syncQuestionsForQuiz(quizId: string, questions: any[], token: string) {
+  const questionWhere = { quizId }
+  debugLog("PATCH questions read start", { quizId, tableName: QUESTION_TABLE, where: questionWhere })
+  const qRes = await robleDbRead({ tableName: QUESTION_TABLE, token, where: questionWhere })
+  debugLog("PATCH questions read result", { quizId, tableName: QUESTION_TABLE, where: questionWhere, result: qRes })
+  if (!qRes.success) return qRes
+
+  const existingRows = qRes.rows ?? []
+  const existingById = new Map<string, any>()
+  for (const row of existingRows) {
+    const id = questionRowId(row)
+    if (id) existingById.set(id, row)
+  }
+
+  const incomingIds = new Set<string>()
+  const inserts: Record<string, any>[] = []
+
+  for (const [order, question] of questions.entries()) {
+    const id = questionRowId(question)
+    const record = questionRecord(quizId, question, order)
+
+    if (id && existingById.has(id)) {
+      incomingIds.add(id)
+      debugLog("PATCH question update start", { quizId, questionId: id, tableName: QUESTION_TABLE, data: record })
+      const upd = await robleDbUpdate({ tableName: QUESTION_TABLE, token, where: { _id: id }, data: record })
+      debugLog("PATCH question update result", { quizId, questionId: id, tableName: QUESTION_TABLE, result: upd })
+      if (!upd.success) return upd
+    } else {
+      inserts.push(record)
+    }
+  }
+
+  if (inserts.length > 0) {
+    debugLog("PATCH questions insert start", { quizId, tableName: QUESTION_TABLE, records: inserts })
+    const ins = await robleDbInsert({ tableName: QUESTION_TABLE, token, records: inserts })
+    debugLog("PATCH questions insert result", { quizId, tableName: QUESTION_TABLE, result: ins })
+    if (!ins.success) return ins
+  }
+
+  for (const id of existingById.keys()) {
+    if (incomingIds.has(id)) continue
+
+    debugLog("PATCH question delete start", { quizId, questionId: id, tableName: QUESTION_TABLE, where: { _id: id } })
+    const del = await robleDbDelete({ tableName: QUESTION_TABLE, token, where: { _id: id } })
+    debugLog("PATCH question delete result", { quizId, questionId: id, tableName: QUESTION_TABLE, result: del })
     if (!del.success) return del
   }
 
@@ -196,16 +263,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!upd.success) return NextResponse.json({ error: upd.error ?? "Error actualizando quiz", debug: { tableName: QUIZ_TABLE, where: quizWhere, result: upd } }, { status: upd.status ?? 500 })
 
   if (Array.isArray(questions)) {
-    const delQ = await deleteQuestionsForQuiz(params.id, token)
-    if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error limpiando preguntas", debug: { tableName: QUESTION_TABLE, where: { quizId: params.id }, result: delQ } }, { status: delQ.status ?? 500 })
-
-    const records = questions.map((qq: any, i: number) => ({ quizId: params.id, type: qq.type, text: qq.text, options: jsonText(qq.options), correctAnswers: jsonText(qq.correctAnswers), explanation: qq.explanation ?? null, order: i }))
-    if (records.length > 0) {
-      debugLog("PATCH questions insert start", { paramsId: params.id, tableName: QUESTION_TABLE, records })
-      const insQ = await robleDbInsert({ tableName: QUESTION_TABLE, token, records })
-      debugLog("PATCH questions insert result", { paramsId: params.id, tableName: QUESTION_TABLE, result: insQ })
-      if (!insQ.success) return NextResponse.json({ error: insQ.error ?? "Error guardando preguntas", debug: { tableName: QUESTION_TABLE, records, result: insQ } }, { status: insQ.status ?? 500 })
-    }
+    const syncQ = await syncQuestionsForQuiz(params.id, questions, token)
+    if (!syncQ.success) return NextResponse.json({ error: syncQ.error ?? "Error guardando preguntas", debug: { tableName: QUESTION_TABLE, result: syncQ } }, { status: syncQ.status ?? 500 })
   }
 
   return NextResponse.json({ quiz: { ...normalizeQuiz(existing, []), ...updates } })

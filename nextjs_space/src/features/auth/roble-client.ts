@@ -36,6 +36,10 @@ function robleDeleteUrls() {
   return robleBases().map((base) => `${base}/database/${DB}/delete`)
 }
 
+function robleUpdateUrls() {
+  return robleBases().map((base) => `${base}/database/${DB}/update`)
+}
+
 function parseJson(text: string) {
   if (!text) return {}
   try {
@@ -163,6 +167,45 @@ async function requestRobleDeleteRow(tableName: string, id: string, accessToken:
   }
 
   return firstErr ?? { success: false, error: "Delete failed", status: 500 }
+}
+
+async function requestRobleUpdateRow(tableName: string, id: string, updates: Record<string, any>, accessToken: string) {
+  if (!BASE || !DB) return { success: false, error: "Roble not configured", status: 500 }
+
+  const method = "PUT"
+  const requestBody = { tableName, idColumn: "_id", idValue: id, updates }
+  let firstErr: any = null
+
+  for (const url of robleUpdateUrls()) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      })
+      const text = await res.text()
+      const data: any = parseJson(text)
+      const debug = { url, method, requestBody, status: res.status, rawResponseBody: text, parsedResponse: data }
+      console.log("[roble:update]", JSON.stringify(debug, null, 2))
+
+      if (res.ok) return { success: true, status: res.status, url, method, rawResponseBody: text, ...data }
+
+      const error = data?.error ?? data?.message ?? (text || `Roble update failed on ${url} (${res.status})`)
+      const result = { success: false, error, status: res.status, debug }
+      if (res.status !== 404 || !firstErr) firstErr = result
+      if (res.status === 401 || res.status === 403 || error.includes('column "undefined" does not exist')) return result
+    } catch (e: any) {
+      const error = e?.message ?? "Roble update failed"
+      const debug = { url, method, requestBody, error }
+      console.log("[roble:update]", JSON.stringify(debug, null, 2))
+      if (!firstErr) firstErr = { success: false, error, status: 500, debug }
+    }
+  }
+
+  return firstErr ?? { success: false, error: "Update failed", status: 500 }
 }
 
 async function requestRoble(path: string, payload: Record<string, unknown>) {
@@ -333,6 +376,31 @@ function malformedWhereError(tableName: string, where?: Record<string, any>) {
   return null
 }
 
+function missingRowIdError(operation: "update" | "delete", tableName: string, where?: Record<string, any>) {
+  const keys = Object.keys(where ?? {})
+  const badKey = keys.find((key) => key === "undefined" || key.trim() === "")
+  if (badKey) {
+    return {
+      success: false,
+      error: `${operation} aborted: invalid where key "${badKey}" for ${tableName}`,
+      status: 400,
+      debug: { tableName, where },
+    }
+  }
+
+  const id = primaryKeyValue(where)
+  if (id === undefined || id === null || String(id).trim() === "") {
+    return {
+      success: false,
+      error: `${operation} aborted: ${tableName} requires where._id`,
+      status: 400,
+      debug: { tableName, where },
+    }
+  }
+
+  return null
+}
+
 function uniqueRecordSets(recordSets: Record<string, any>[][]) {
   const seen = new Set<string>()
   const out: Record<string, any>[][] = []
@@ -481,32 +549,11 @@ export async function robleDbUpdate(args: {
   where?: Record<string, any>
   data: Record<string, any>
 }) {
-  let firstErr: any = null
+  const invalid = missingRowIdError("update", args.tableName, args.where)
+  if (invalid) return invalid
 
-  for (const tableName of tableNameVariants(args.tableName)) {
-    for (const mode of ["identity", "snake"] as const) {
-      for (const where of whereVariants(args.where)) {
-        const data = transformRecordKeys(args.data, mode)
-        const id = primaryKeyValue(where)
-        const payloads = [
-          { tableName, where, data },
-          { tableName, filters: where, data },
-          { tableName, where, updates: data },
-          { tableName, filters: where, set: data },
-          ...(id !== undefined && id !== null ? [
-            { tableName, id, data },
-            { tableName, _id: id, data },
-            { tableName, record: { _id: id, ...data } },
-            { tableName, records: [{ _id: id, ...data }] },
-          ] : []),
-        ]
-        const result = await requestRobleData("update", payloads, args.token, { methods: ["POST", "PUT", "PATCH"], debug: true })
-        if (result.success) return result
-        if (!firstErr) firstErr = result
-      }
-    }
-  }
-  return firstErr ?? { success: false, error: "Update failed", status: 500 }
+  const id = String(primaryKeyValue(args.where))
+  return requestRobleUpdateRow(args.tableName, id, args.data, args.token)
 }
 
 export async function robleDbDelete(args: {
