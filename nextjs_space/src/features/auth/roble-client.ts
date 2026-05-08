@@ -79,6 +79,9 @@ async function requestRobleData(
           if (res.ok) return { success: true, status: res.status, url, method, rawResponseBody: text, ...data }
 
           const err = data?.error ?? data?.message ?? (text || `Roble ${path} failed on ${url} (${res.status})`)
+          if (options?.debug && (res.status === 401 || res.status === 403)) {
+            return { success: false, error: err, status: res.status, debug }
+          }
           if (firstError === "Roble request failed") {
             firstError = err
             firstStatus = res.status
