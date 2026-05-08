@@ -48,7 +48,10 @@ export default function Dashboard() {
   async function del(id: string) {
     if (!confirm("¿Eliminar este quiz?")) return
     const res = await fetch(`/api/quizzes/${id}`, { method: "DELETE" })
-    if (res.ok) { toast.success("Quiz eliminado"); load() } else toast.error("Error al eliminar")
+    if (res.ok) { toast.success("Quiz eliminado"); load() } else {
+      const text = await res.text()
+      toast.error(text || "Error al eliminar")
+    }
   }
 
   const filtered = quizzes.filter((qq: any) =>

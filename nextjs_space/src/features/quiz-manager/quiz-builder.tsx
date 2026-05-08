@@ -94,7 +94,7 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
         } catch {
           d = {}
         }
-        toast.error(d?.error ?? "Error guardando")
+        toast.error(d?.error ? `${d.error}: ${text}` : text || "Error guardando")
         return
       }
       toast.success("Quiz guardado")

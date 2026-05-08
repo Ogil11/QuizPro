@@ -17,7 +17,17 @@ export default function PlayQuiz() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/quizzes/${params.id}`).then(r=>r.json()).then(d => {
+    fetch(`/api/quizzes/${params.id}`).then(async r => {
+      const text = await r.text()
+      let d: any = {}
+      try {
+        d = text ? JSON.parse(text) : {}
+      } catch {
+        d = {}
+      }
+      if (!r.ok) toast.error(text || "Error cargando quiz")
+      return d
+    }).then(d => {
       if (!d.quiz) { router.replace("/dashboard"); return }
       setQuiz(d.quiz)
       setAnswers(Array(d.quiz.questions.length).fill(null).map(() => ({ selected: [], timeMs: 0 })))
@@ -54,7 +64,11 @@ export default function PlayQuiz() {
       body: JSON.stringify({ quizId: quiz.id, answers: finalAnswers, durationSec }),
     })
     setSubmitting(false)
-    if (!res.ok) { toast.error("Error enviando"); return }
+    if (!res.ok) {
+      const text = await res.text()
+      toast.error(text || "Error enviando")
+      return
+    }
     const data = await res.json()
     sessionStorage.setItem(`attempt-${data.attempt.id}`, JSON.stringify({ attempt: data.attempt, detailed: data.detailed, quiz }))
     router.replace(`/quiz/${quiz.id}/result?attempt=${data.attempt.id}`)
