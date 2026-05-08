@@ -33,7 +33,7 @@ function robleDataUrls(path: string) {
 }
 
 function robleDeleteUrls() {
-  return robleBases().map((base) => `${base}/database/${DB}`)
+  return robleBases().map((base) => `${base}/database/${DB}/delete`)
 }
 
 function parseJson(text: string) {
@@ -130,7 +130,7 @@ async function requestRobleDeleteRow(tableName: string, id: string, accessToken:
   if (!BASE || !DB) return { success: false, error: "Roble not configured", status: 500 }
 
   const method = "DELETE"
-  const requestBody = { tableName, id }
+  const requestBody = { tableName, idColumn: "_id", idValue: id }
   let firstErr: any = null
 
   for (const url of robleDeleteUrls()) {
