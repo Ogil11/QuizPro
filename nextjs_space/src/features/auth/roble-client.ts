@@ -483,7 +483,7 @@ export async function robleDbDelete(args: {
       { tableName, where },
       { tableName, filters: where },
     ]
-    const result = await requestRobleData("delete", payloads, args.token, { methods: ["POST"], debug: true })
+    const result = await requestRobleData("delete", payloads, args.token, { methods: ["DELETE"], debug: true })
     if (result.success) return result
     const raw = String((result as any)?.debug?.rawResponseBody ?? result.error ?? "")
     if (result.status === 500 && raw.includes('column "undefined" does not exist')) return result
