@@ -25,10 +25,12 @@ export default function SignupPage() {
         body: JSON.stringify({ email, password, name }),
       })
       const data = await res.json()
-      if (!res.ok) { toast.error(data.error ?? "Error al crear cuenta"); return }
+      if (!res.ok) {
+        if (res.status !== 409) { toast.error(data.error ?? "Error al crear cuenta"); return }
+      }
       const r = await signIn("credentials", { email, password, redirect: false })
-      if (r?.error) { toast.error("Error al iniciar sesi\u00f3n"); return }
-      toast.success("Cuenta creada")
+      if (r?.error) { toast.error("Error al iniciar sesión"); return }
+      toast.success(res.status === 409 ? "Sesión iniciada" : "Cuenta creada")
       router.replace("/dashboard")
     } finally { setLoading(false) }
   }

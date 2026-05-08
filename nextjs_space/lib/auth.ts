@@ -1,12 +1,10 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import bcrypt from "bcryptjs"
 import { prisma } from "./db"
 import { robleLogin } from "@/src/features/auth/roble-client"
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as any,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
@@ -19,29 +17,37 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
         const email = credentials.email.toLowerCase()
-        let user = await prisma.user.findUnique({ where: { email } })
+        let user = null as Awaited<ReturnType<typeof prisma.user.findUnique>>
 
-        // Try Roble first if no local password
+        try {
+          user = await prisma.user.findUnique({ where: { email } })
+        } catch {}
+
         if (!user || !user.password) {
           try {
             const roble = await robleLogin(email, credentials.password)
             if (roble?.success) {
-              user = await prisma.user.upsert({
-                where: { email },
-                create: {
-                  email,
-                  name: roble.user?.name ?? email.split("@")[0],
-                  robleToken: roble.accessToken,
-                  robleUserId: roble.user?.id ?? null,
-                  provider: "roble",
-                },
-                update: { robleToken: roble.accessToken },
-              })
-              return { id: user.id, email: user.email, name: user.name ?? "" }
+              try {
+                user = await prisma.user.upsert({
+                  where: { email },
+                  create: {
+                    email,
+                    name: roble.user?.name ?? email.split("@")[0],
+                    robleToken: roble.accessToken,
+                    robleUserId: roble.user?.id ?? null,
+                    provider: "roble",
+                  },
+                  update: { robleToken: roble.accessToken },
+                })
+                return { id: user.id, email: user.email, name: user.name ?? "" }
+              } catch {}
+              return {
+                id: roble.user?.id ?? `roble:${email}`,
+                email,
+                name: roble.user?.name ?? email.split("@")[0],
+              }
             }
-          } catch (e) {
-            // fall back to local password
-          }
+          } catch {}
         }
         if (!user || !user.password) return null
         const ok = await bcrypt.compare(credentials.password, user.password)
