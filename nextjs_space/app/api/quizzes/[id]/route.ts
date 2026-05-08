@@ -8,10 +8,6 @@ export const dynamic = "force-dynamic"
 const QUIZ_TABLE = process.env.ROBLE_QUIZ_TABLE ?? "Quiz"
 const QUESTION_TABLE = process.env.ROBLE_QUESTION_TABLE ?? "Question"
 
-function quizPrimaryKey(id: string) {
-  return { _id: id }
-}
-
 function snake(k: string) {
   return k.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase()
 }
@@ -61,6 +57,27 @@ function normalizedIds(rows: any[]) {
   }))
 }
 
+async function deleteQuestionsForQuiz(quizId: string, token: string) {
+  const questionWhere = { quizId }
+  debugLog("questions read for delete start", { quizId, tableName: QUESTION_TABLE, where: questionWhere })
+  const qRes = await robleDbRead({ tableName: QUESTION_TABLE, token, where: questionWhere })
+  debugLog("questions read for delete result", { quizId, tableName: QUESTION_TABLE, where: questionWhere, result: qRes })
+  if (!qRes.success) return qRes
+
+  for (const question of qRes.rows ?? []) {
+    const questionId = String(val(question, "_id", "id") ?? "")
+    if (!questionId) continue
+
+    const where = { _id: questionId }
+    debugLog("question delete start", { quizId, questionId, tableName: QUESTION_TABLE, where })
+    const del = await robleDbDelete({ tableName: QUESTION_TABLE, token, where })
+    debugLog("question delete result", { quizId, questionId, tableName: QUESTION_TABLE, where, result: del })
+    if (!del.success) return del
+  }
+
+  return { success: true }
+}
+
 function isCreator(existing: any, sessionUser: any) {
   const creatorId = val(existing, "creatorId", "userId", "user_id", "ownerId", "owner_id")
   const normalizedOwnerId = normalizeRobleId(creatorId)
@@ -98,7 +115,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-  const quizWhere = quizPrimaryKey(params.id)
+  const quizWhere = { _id: params.id }
   debugLog("GET quiz read start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
   const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizWhere })
   debugLog("GET quiz read result", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere, result: quizRes })
@@ -141,7 +158,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   const sessionUser = session?.user as any
 
-  const quizWhere = quizPrimaryKey(params.id)
+  const quizWhere = { _id: params.id }
   debugLog("PATCH quiz read start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
   const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizWhere })
   debugLog("PATCH quiz read result", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere, result: quizRes })
@@ -172,11 +189,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!upd.success) return NextResponse.json({ error: upd.error ?? "Error actualizando quiz", debug: { tableName: QUIZ_TABLE, where: quizWhere, result: upd } }, { status: upd.status ?? 500 })
 
   if (Array.isArray(questions)) {
-    const questionWhere = { quizId: params.id }
-    debugLog("PATCH questions delete start", { paramsId: params.id, tableName: QUESTION_TABLE, where: questionWhere })
-    const delQ = await robleDbDelete({ tableName: QUESTION_TABLE, token, where: questionWhere })
-    debugLog("PATCH questions delete result", { paramsId: params.id, tableName: QUESTION_TABLE, where: questionWhere, result: delQ })
-    if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error limpiando preguntas", debug: { tableName: QUESTION_TABLE, where: questionWhere, result: delQ } }, { status: delQ.status ?? 500 })
+    const delQ = await deleteQuestionsForQuiz(params.id, token)
+    if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error limpiando preguntas", debug: { tableName: QUESTION_TABLE, where: { quizId: params.id }, result: delQ } }, { status: delQ.status ?? 500 })
 
     const records = questions.map((qq: any, i: number) => ({ quizId: params.id, type: qq.type, text: qq.text, options: jsonText(qq.options), correctAnswers: jsonText(qq.correctAnswers), explanation: qq.explanation ?? null, order: i }))
     if (records.length > 0) {
@@ -197,7 +211,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   const sessionUser = session?.user as any
 
-  const quizWhere = quizPrimaryKey(params.id)
+  const quizWhere = { _id: params.id }
   debugLog("DELETE quiz read start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
   const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizWhere })
   debugLog("DELETE quiz read result", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere, result: quizRes })
@@ -211,11 +225,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   debugLog("DELETE ownership check", { paramsId: params.id, ...owner })
   if (!owner.allowed) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
 
-  const questionWhere = { quizId: params.id }
-  debugLog("DELETE questions delete start", { paramsId: params.id, tableName: QUESTION_TABLE, where: questionWhere })
-  const delQ = await robleDbDelete({ tableName: QUESTION_TABLE, token, where: questionWhere })
-  debugLog("DELETE questions delete result", { paramsId: params.id, tableName: QUESTION_TABLE, where: questionWhere, result: delQ })
-  if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error eliminando preguntas", debug: { tableName: QUESTION_TABLE, where: questionWhere, result: delQ } }, { status: delQ.status ?? 500 })
+  const delQ = await deleteQuestionsForQuiz(params.id, token)
+  if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error eliminando preguntas", debug: { tableName: QUESTION_TABLE, where: { quizId: params.id }, result: delQ } }, { status: delQ.status ?? 500 })
   debugLog("DELETE quiz delete start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
   const delQuiz = await robleDbDelete({ tableName: QUIZ_TABLE, token, where: quizWhere })
   debugLog("DELETE quiz delete result", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere, result: delQuiz })
