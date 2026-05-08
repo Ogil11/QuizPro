@@ -32,6 +32,10 @@ function robleDataUrls(path: string) {
   ])
 }
 
+function robleDeleteUrls() {
+  return robleBases().map((base) => `${base}/database/${DB}`)
+}
+
 function parseJson(text: string) {
   if (!text) return {}
   try {
@@ -120,6 +124,45 @@ async function requestRobleData(
     status: firstNon404Error ? firstNon404Status : firstStatus,
     debug: firstNon404Debug || firstDebug,
   }
+}
+
+async function requestRobleDeleteRow(tableName: string, id: string, accessToken: string) {
+  if (!BASE || !DB) return { success: false, error: "Roble not configured", status: 500 }
+
+  const method = "DELETE"
+  const requestBody = { tableName, id }
+  let firstErr: any = null
+
+  for (const url of robleDeleteUrls()) {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      })
+      const text = await res.text()
+      const data: any = parseJson(text)
+      const debug = { url, method, requestBody, status: res.status, rawResponseBody: text, parsedResponse: data }
+      console.log("[roble:delete]", JSON.stringify(debug, null, 2))
+
+      if (res.ok) return { success: true, status: res.status, url, method, rawResponseBody: text, ...data }
+
+      const error = data?.error ?? data?.message ?? (text || `Roble delete failed on ${url} (${res.status})`)
+      const result = { success: false, error, status: res.status, debug }
+      if (res.status !== 404 || !firstErr) firstErr = result
+      if (res.status === 401 || res.status === 403 || error.includes('column "undefined" does not exist')) return result
+    } catch (e: any) {
+      const error = e?.message ?? "Roble delete failed"
+      const debug = { url, method, requestBody, error }
+      console.log("[roble:delete]", JSON.stringify(debug, null, 2))
+      if (!firstErr) firstErr = { success: false, error, status: 500, debug }
+    }
+  }
+
+  return firstErr ?? { success: false, error: "Delete failed", status: 500 }
 }
 
 async function requestRoble(path: string, payload: Record<string, unknown>) {
@@ -474,20 +517,6 @@ export async function robleDbDelete(args: {
   const invalid = malformedWhereError(args.tableName, args.where)
   if (invalid) return invalid
 
-  let firstErr: any = null
-
-  for (const tableName of tableNameVariants(args.tableName)) {
-    const id = primaryKeyValue(args.where)
-    const where = { _id: id }
-    const payloads = [
-      { tableName, where },
-      { tableName, filters: where },
-    ]
-    const result = await requestRobleData("delete", payloads, args.token, { methods: ["DELETE"], debug: true })
-    if (result.success) return result
-    const raw = String((result as any)?.debug?.rawResponseBody ?? result.error ?? "")
-    if (result.status === 500 && raw.includes('column "undefined" does not exist')) return result
-    if (!firstErr) firstErr = result
-  }
-  return firstErr ?? { success: false, error: "Delete failed", status: 500 }
+  const id = String(primaryKeyValue(args.where))
+  return requestRobleDeleteRow(args.tableName, id, args.token)
 }
