@@ -33,6 +33,10 @@ function parseJsonArray(value: unknown): any[] {
   }
 }
 
+function answersText(value: unknown) {
+  return JSON.stringify(Array.isArray(value) ? value : [])
+}
+
 function debugLog(step: string, payload: Record<string, unknown>) {
   console.log(`[attempts:${step}]`, JSON.stringify(payload, null, 2))
 }
@@ -102,7 +106,7 @@ export async function POST(req: NextRequest) {
     correct,
     total,
     durationSec: Number(durationSec) || 0,
-    answers: detailed,
+    answers: answersText(detailed),
     createdAt: now,
   }
   debugLog("POST attempt insert start", { quizId, tableName: ATTEMPT_TABLE, records: [attemptRecord] })
@@ -111,7 +115,7 @@ export async function POST(req: NextRequest) {
   if (!insertRes.success) return NextResponse.json({ error: insertRes.error ?? "Error guardando intento", debug: { tableName: ATTEMPT_TABLE, records: [attemptRecord], result: insertRes } }, { status: insertRes.status ?? 500 })
 
   const insertedAttempt = Array.isArray((insertRes as any)?.inserted) ? (insertRes as any).inserted[0] : undefined
-  const attempt = { ...attemptRecord, id: String(val(insertedAttempt, "id", "_id") ?? crypto.randomUUID()) }
+  const attempt = { ...attemptRecord, answers: detailed, id: String(val(insertedAttempt, "id", "_id") ?? crypto.randomUUID()) }
   return NextResponse.json({ attempt, detailed })
 }
 
@@ -149,7 +153,7 @@ export async function GET() {
         correct: Number(val(a, "correct") ?? 0),
         total: Number(val(a, "total") ?? 0),
         durationSec: Number(val(a, "durationSec") ?? 0),
-        answers: Array.isArray(val(a, "answers")) ? val(a, "answers") : [],
+        answers: parseJsonArray(val(a, "answers")),
         createdAt: val(a, "createdAt") ?? new Date().toISOString(),
         quiz: quizById.get(quizId) ?? { name: "Quiz", category: "general", difficulty: "medium" },
       }

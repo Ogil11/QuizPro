@@ -30,6 +30,13 @@ function jsonText(value: unknown) {
   return JSON.stringify(value ?? [])
 }
 
+function normalizeRobleId(value: unknown): string {
+  if (value && typeof value === "object") {
+    return normalizeRobleId(val(value, "_id", "id", "userId", "user_id", "creatorId", "creator_id"))
+  }
+  return String(value ?? "").trim()
+}
+
 function parseJsonArray(value: unknown): any[] {
   if (Array.isArray(value)) return value
   if (typeof value !== "string") return []
@@ -54,6 +61,21 @@ function normalizedIds(rows: any[]) {
   }))
 }
 
+function isCreator(existing: any, sessionUser: any) {
+  const creatorId = val(existing, "creatorId", "userId", "user_id", "ownerId", "owner_id")
+  const normalizedOwnerId = normalizeRobleId(creatorId)
+  const normalizedCurrentUserId = normalizeRobleId(sessionUser)
+
+  return {
+    creatorId,
+    sessionUserId: sessionUser?.id,
+    sessionUserEmail: sessionUser?.email,
+    normalizedOwnerId,
+    normalizedCurrentUserId,
+    allowed: !!normalizedOwnerId && normalizedOwnerId === normalizedCurrentUserId,
+  }
+}
+
 function normalizeQuiz(quiz: any, questions: any[]) {
   return {
     id: String(val(quiz, "id", "quizId", "_id") ?? ""),
@@ -63,7 +85,7 @@ function normalizeQuiz(quiz: any, questions: any[]) {
     difficulty: String(val(quiz, "difficulty") ?? "medium"),
     isPublic: Boolean(val(quiz, "isPublic", "public") ?? false),
     creationMode: String(val(quiz, "creationMode") ?? "manual"),
-    creatorId: String(val(quiz, "creatorId", "userId", "ownerId") ?? ""),
+    creatorId: normalizeRobleId(val(quiz, "creatorId", "userId", "user_id", "ownerId", "owner_id")),
     questions,
     creator: { name: val(quiz, "creatorName") ?? null, email: val(quiz, "creatorEmail") ?? null },
     createdAt: val(quiz, "createdAt") ?? new Date().toISOString(),
@@ -117,6 +139,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const userId = (session?.user as any)?.id as string | undefined
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  const sessionUser = session?.user as any
 
   const quizWhere = quizPrimaryKey(params.id)
   debugLog("PATCH quiz read start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
@@ -127,8 +150,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   debugLog("PATCH quiz normalized ids", { paramsId: params.id, ids: normalizedIds(existingRows) })
   const existing = existingRows.find((r: any) => String(val(r, "id", "quizId", "_id") ?? "") === params.id)
   if (!existing) return NextResponse.json({ error: "No encontrado", debug: { paramsId: params.id, ids: normalizedIds(existingRows) } }, { status: 404 })
-  const creatorId = String(val(existing, "creatorId", "userId", "ownerId") ?? "")
-  if (creatorId && creatorId !== userId) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
+  const owner = isCreator(existing, sessionUser)
+  debugLog("PATCH ownership check", { paramsId: params.id, ...owner })
+  if (!owner.allowed) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
 
   const body = await req.json()
   const { name, description, category, difficulty, isPublic, questions } = body
@@ -171,6 +195,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const userId = (session?.user as any)?.id as string | undefined
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  const sessionUser = session?.user as any
 
   const quizWhere = quizPrimaryKey(params.id)
   debugLog("DELETE quiz read start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
@@ -182,8 +207,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const existing = existingRows.find((r: any) => String(val(r, "id", "quizId", "_id") ?? "") === params.id)
   if (!existing) return NextResponse.json({ error: "No encontrado", debug: { paramsId: params.id, ids: normalizedIds(existingRows) } }, { status: 404 })
 
-  const creatorId = String(val(existing, "creatorId", "userId", "ownerId") ?? "")
-  if (creatorId && creatorId !== userId) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
+  const owner = isCreator(existing, sessionUser)
+  debugLog("DELETE ownership check", { paramsId: params.id, ...owner })
+  if (!owner.allowed) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
 
   const questionWhere = { quizId: params.id }
   debugLog("DELETE questions delete start", { paramsId: params.id, tableName: QUESTION_TABLE, where: questionWhere })

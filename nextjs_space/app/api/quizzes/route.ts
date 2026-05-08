@@ -27,6 +27,17 @@ function jsonText(value: unknown) {
   return JSON.stringify(value ?? [])
 }
 
+function normalizeRobleId(value: unknown) {
+  if (value && typeof value === "object") {
+    return normalizeRobleId(val(value, "_id", "id", "userId", "user_id", "creatorId", "creator_id"))
+  }
+  return String(value ?? "").trim()
+}
+
+function debugLog(step: string, payload: Record<string, unknown>) {
+  console.log(`[quizzes:${step}]`, JSON.stringify(payload, null, 2))
+}
+
 function mapQuiz(row: any, questionsCount: number, attemptsCount: number) {
   return {
     id: String(val(row, "id", "quizId", "_id") ?? ""),
@@ -36,7 +47,7 @@ function mapQuiz(row: any, questionsCount: number, attemptsCount: number) {
     difficulty: String(val(row, "difficulty") ?? "medium"),
     isPublic: Boolean(val(row, "isPublic", "public") ?? false),
     creationMode: String(val(row, "creationMode") ?? "manual"),
-    creatorId: String(val(row, "creatorId", "userId", "ownerId") ?? ""),
+    creatorId: normalizeRobleId(val(row, "creatorId", "userId", "user_id", "ownerId", "owner_id")),
     createdAt: val(row, "createdAt") ?? new Date().toISOString(),
     updatedAt: val(row, "updatedAt") ?? new Date().toISOString(),
     creator: { name: val(row, "creatorName") ?? null, email: val(row, "creatorEmail") ?? null },
@@ -53,6 +64,7 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url)
     const scope = url.searchParams.get("scope") ?? "all"
+    const normalizedCurrentUserId = normalizeRobleId(session?.user)
 
     const quizzesRes = await robleDbRead({ tableName: QUIZ_TABLE, token, orderBy: "createdAt", orderDirection: "desc" })
     if (!quizzesRes.success) return NextResponse.json({ error: quizzesRes.error ?? "Error cargando quizzes" }, { status: quizzesRes.status ?? 500 })
@@ -81,9 +93,9 @@ export async function GET(req: NextRequest) {
     const quizzes = quizzesRows
       .map((row: any) => mapQuiz(row, qCount.get(String(val(row, "id", "quizId", "_id") ?? "")) ?? 0, aCount.get(String(val(row, "id", "quizId", "_id") ?? "")) ?? 0))
       .filter((quiz: any) => {
-        if (scope === "mine") return userId ? quiz.creatorId === userId : false
+        if (scope === "mine") return userId ? quiz.creatorId === normalizedCurrentUserId : false
         if (scope === "public") return !!quiz.isPublic
-        return userId ? quiz.isPublic || quiz.creatorId === userId : !!quiz.isPublic
+        return userId ? quiz.isPublic || quiz.creatorId === normalizedCurrentUserId : !!quiz.isPublic
       })
 
     return NextResponse.json({ quizzes })
@@ -97,6 +109,7 @@ export async function POST(req: NextRequest) {
   const userId = (session?.user as any)?.id as string | undefined
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  const sessionUser = session?.user as any
 
   try {
     const body = await req.json()
@@ -107,7 +120,15 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString()
     const quizRecord = { name, description: description ?? null, category, difficulty, isPublic: !!isPublic, creationMode: creationMode ?? "manual", creatorId: userId, createdAt: now, updatedAt: now }
+    debugLog("POST quiz insert start", {
+      creatorId: quizRecord.creatorId,
+      sessionUserId: userId,
+      sessionUserEmail: sessionUser?.email,
+      normalizedOwnerId: normalizeRobleId(quizRecord.creatorId),
+      normalizedCurrentUserId: normalizeRobleId(sessionUser),
+    })
     const quizIns = await robleDbInsert({ tableName: QUIZ_TABLE, token, records: [quizRecord] })
+    debugLog("POST quiz insert result", { creatorId: quizRecord.creatorId, result: quizIns })
     if (!quizIns.success) return NextResponse.json({ error: quizIns.error ?? "Error creando quiz" }, { status: quizIns.status ?? 500 })
 
     const insertedQuiz = Array.isArray((quizIns as any)?.inserted) ? (quizIns as any).inserted[0] : undefined
