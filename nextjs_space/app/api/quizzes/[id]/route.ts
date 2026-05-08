@@ -8,6 +8,10 @@ export const dynamic = "force-dynamic"
 const QUIZ_TABLE = process.env.ROBLE_QUIZ_TABLE ?? "Quiz"
 const QUESTION_TABLE = process.env.ROBLE_QUESTION_TABLE ?? "Question"
 
+function quizPrimaryKey(id: string) {
+  return { _id: id }
+}
+
 function snake(k: string) {
   return k.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase()
 }
@@ -59,7 +63,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-  const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: { id: params.id } })
+  const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizPrimaryKey(params.id) })
   if (!quizRes.success) return NextResponse.json({ error: quizRes.error ?? "Error cargando quiz" }, { status: quizRes.status ?? 500 })
 
   const quizRows = quizRes.rows ?? []
@@ -90,7 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-  const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: { id: params.id } })
+  const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizPrimaryKey(params.id) })
   if (!quizRes.success) return NextResponse.json({ error: quizRes.error ?? "Error cargando quiz" }, { status: quizRes.status ?? 500 })
   const existingRows = quizRes.rows ?? []
   const existing = existingRows.find((r: any) => String(val(r, "id", "quizId", "_id") ?? "") === params.id)
@@ -110,7 +114,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     updatedAt: new Date().toISOString(),
   }
 
-  const upd = await robleDbUpdate({ tableName: QUIZ_TABLE, token, where: { id: params.id }, data: updates })
+  const upd = await robleDbUpdate({ tableName: QUIZ_TABLE, token, where: quizPrimaryKey(params.id), data: updates })
   if (!upd.success) return NextResponse.json({ error: upd.error ?? "Error actualizando quiz" }, { status: upd.status ?? 500 })
 
   if (Array.isArray(questions)) {
@@ -133,7 +137,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const token = (session?.user as any)?.robleAccessToken as string | undefined
   if (!userId || !token) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-  const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: { id: params.id } })
+  const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizPrimaryKey(params.id) })
   if (!quizRes.success) return NextResponse.json({ error: quizRes.error ?? "Error cargando quiz" }, { status: quizRes.status ?? 500 })
   const existingRows = quizRes.rows ?? []
   const existing = existingRows.find((r: any) => String(val(r, "id", "quizId", "_id") ?? "") === params.id)
@@ -144,7 +148,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   const delQ = await robleDbDelete({ tableName: QUESTION_TABLE, token, where: { quizId: params.id } })
   if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error eliminando preguntas" }, { status: delQ.status ?? 500 })
-  const delQuiz = await robleDbDelete({ tableName: QUIZ_TABLE, token, where: { id: params.id } })
+  const delQuiz = await robleDbDelete({ tableName: QUIZ_TABLE, token, where: quizPrimaryKey(params.id) })
   if (!delQuiz.success) return NextResponse.json({ error: delQuiz.error ?? "Error eliminando quiz" }, { status: delQuiz.status ?? 500 })
 
   return NextResponse.json({ ok: true })

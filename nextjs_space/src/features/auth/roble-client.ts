@@ -216,10 +216,23 @@ function transformRecordKeys(record: Record<string, any>, mode: "identity" | "sn
 
 function whereVariants(where?: Record<string, any>) {
   const base = where ?? {}
-  return [
-    base,
-    Object.fromEntries(Object.entries(base).map(([k, v]) => [toSnakeCase(k), v])),
-  ]
+  const variants: Record<string, any>[] = []
+
+  if (base.id !== undefined && base._id === undefined) {
+    const { id, ...rest } = base
+    variants.push({ _id: id, ...rest })
+  }
+
+  variants.push(base)
+  variants.push(Object.fromEntries(Object.entries(base).map(([k, v]) => [toSnakeCase(k), v])))
+
+  const seen = new Set<string>()
+  return variants.filter((variant) => {
+    const key = JSON.stringify(variant)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function uniqueRecordSets(recordSets: Record<string, any>[][]) {
