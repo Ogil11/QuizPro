@@ -41,49 +41,68 @@ function parseJson(text: string) {
   }
 }
 
-async function requestRobleData(path: string, payloads: Record<string, unknown>[], accessToken?: string) {
+async function requestRobleData(
+  path: string,
+  payloads: Record<string, unknown>[],
+  accessToken?: string,
+  options?: { methods?: string[]; debug?: boolean }
+) {
   if (!BASE || !DB) return { success: false, error: "Roble not configured", status: 500 }
 
   let firstError = "Roble request failed"
   let firstStatus = 500
   let firstNon404Error = ""
   let firstNon404Status = 500
+  let firstDebug: Record<string, unknown> | undefined
+  let firstNon404Debug: Record<string, unknown> | undefined
+  const methods = options?.methods ?? ["POST"]
 
   for (const url of robleDataUrls(path)) {
     for (const payload of payloads) {
-      try {
-        const headers: Record<string, string> = { "Content-Type": "application/json" }
-        if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+      for (const method of methods) {
+        try {
+          const headers: Record<string, string> = { "Content-Type": "application/json" }
+          if (accessToken) headers.Authorization = `Bearer ${accessToken}`
 
-        const res = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        })
+          const body = JSON.stringify(payload)
+          const res = await fetch(url, {
+            method,
+            headers,
+            body,
+          })
 
-        const text = await res.text()
-        const data: any = parseJson(text)
+          const text = await res.text()
+          const data: any = parseJson(text)
+          const debug = { url, method, requestBody: payload, status: res.status, rawResponseBody: text, parsedResponse: data }
+          if (options?.debug) console.log(`[roble:${path}]`, JSON.stringify(debug, null, 2))
 
-        if (res.ok) return { success: true, status: res.status, url, ...data }
+          if (res.ok) return { success: true, status: res.status, url, method, rawResponseBody: text, ...data }
 
-        const err = data?.error ?? data?.message ?? `Roble ${path} failed on ${url} (${res.status})`
-        if (firstError === "Roble request failed") {
-          firstError = err
-          firstStatus = res.status
-        }
-        if (res.status !== 404 && !firstNon404Error) {
-          firstNon404Error = err
-          firstNon404Status = res.status
-        }
-      } catch (e: any) {
-        const err = e?.message ?? "Roble request failed"
-        if (firstError === "Roble request failed") {
-          firstError = err
-          firstStatus = 500
-        }
-        if (!firstNon404Error) {
-          firstNon404Error = err
-          firstNon404Status = 500
+          const err = data?.error ?? data?.message ?? (text || `Roble ${path} failed on ${url} (${res.status})`)
+          if (firstError === "Roble request failed") {
+            firstError = err
+            firstStatus = res.status
+            firstDebug = debug
+          }
+          if (res.status !== 404 && !firstNon404Error) {
+            firstNon404Error = err
+            firstNon404Status = res.status
+            firstNon404Debug = debug
+          }
+        } catch (e: any) {
+          const err = e?.message ?? "Roble request failed"
+          const debug = { url, method, requestBody: payload, error: err }
+          if (options?.debug) console.log(`[roble:${path}]`, JSON.stringify(debug, null, 2))
+          if (firstError === "Roble request failed") {
+            firstError = err
+            firstStatus = 500
+            firstDebug = debug
+          }
+          if (!firstNon404Error) {
+            firstNon404Error = err
+            firstNon404Status = 500
+            firstNon404Debug = debug
+          }
         }
       }
     }
@@ -93,6 +112,7 @@ async function requestRobleData(path: string, payloads: Record<string, unknown>[
     success: false,
     error: firstNon404Error || firstError,
     status: firstNon404Error ? firstNon404Status : firstStatus,
+    debug: firstNon404Debug || firstDebug,
   }
 }
 
@@ -233,6 +253,10 @@ function whereVariants(where?: Record<string, any>) {
     seen.add(key)
     return true
   })
+}
+
+function primaryKeyValue(where?: Record<string, any>) {
+  return where?._id ?? where?.id
 }
 
 function uniqueRecordSets(recordSets: Record<string, any>[][]) {
@@ -383,22 +407,32 @@ export async function robleDbUpdate(args: {
   where?: Record<string, any>
   data: Record<string, any>
 }) {
+  let firstErr: any = null
+
   for (const tableName of tableNameVariants(args.tableName)) {
     for (const mode of ["identity", "snake"] as const) {
       for (const where of whereVariants(args.where)) {
         const data = transformRecordKeys(args.data, mode)
+        const id = primaryKeyValue(where)
         const payloads = [
           { tableName, where, data },
           { tableName, filters: where, data },
           { tableName, where, updates: data },
           { tableName, filters: where, set: data },
+          ...(id !== undefined && id !== null ? [
+            { tableName, id, data },
+            { tableName, _id: id, data },
+            { tableName, record: { _id: id, ...data } },
+            { tableName, records: [{ _id: id, ...data }] },
+          ] : []),
         ]
-        const result = await requestRobleData("update", payloads, args.token)
+        const result = await requestRobleData("update", payloads, args.token, { methods: ["POST", "PUT", "PATCH"], debug: true })
         if (result.success) return result
+        if (!firstErr) firstErr = result
       }
     }
   }
-  return { success: false, error: "Update failed", status: 500 }
+  return firstErr ?? { success: false, error: "Update failed", status: 500 }
 }
 
 export async function robleDbDelete(args: {
@@ -406,15 +440,25 @@ export async function robleDbDelete(args: {
   token: string
   where?: Record<string, any>
 }) {
+  let firstErr: any = null
+
   for (const tableName of tableNameVariants(args.tableName)) {
     for (const where of whereVariants(args.where)) {
+      const id = primaryKeyValue(where)
       const payloads = [
         { tableName, where },
         { tableName, filters: where },
+        ...(id !== undefined && id !== null ? [
+          { tableName, id },
+          { tableName, _id: id },
+          { tableName, ids: [id] },
+          { tableName, records: [{ _id: id }] },
+        ] : []),
       ]
-      const result = await requestRobleData("delete", payloads, args.token)
+      const result = await requestRobleData("delete", payloads, args.token, { methods: ["POST", "DELETE"], debug: true })
       if (result.success) return result
+      if (!firstErr) firstErr = result
     }
   }
-  return { success: false, error: "Delete failed", status: 500 }
+  return firstErr ?? { success: false, error: "Delete failed", status: 500 }
 }
