@@ -3,13 +3,24 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Navbar } from "@/src/shared/navbar"
 import { QuizBuilder } from "@/src/features/quiz-manager/quiz-builder"
+import { toast } from "sonner"
 
 export default function EditQuiz() {
   const params = useParams() as { id: string }
   const router = useRouter()
   const [quiz, setQuiz] = useState<any>(null)
   useEffect(() => {
-    fetch(`/api/quizzes/${params.id}`).then(r=>r.json()).then(d => {
+    fetch(`/api/quizzes/${params.id}`).then(async r => {
+      const text = await r.text()
+      let d: any = {}
+      try {
+        d = text ? JSON.parse(text) : {}
+      } catch {
+        d = {}
+      }
+      if (!r.ok) toast.error(text || "Error cargando quiz")
+      return d
+    }).then(d => {
       if (!d.quiz) router.replace("/dashboard")
       else setQuiz(d.quiz)
     })
