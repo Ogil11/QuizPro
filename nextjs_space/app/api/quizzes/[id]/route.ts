@@ -21,6 +21,22 @@ function val<T = any>(row: any, ...keys: string[]): T | undefined {
   return undefined
 }
 
+function jsonText(value: unknown) {
+  if (typeof value === "string") return value
+  return JSON.stringify(value ?? [])
+}
+
+function parseJsonArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value
+  if (typeof value !== "string") return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function normalizeQuiz(quiz: any, questions: any[]) {
   return {
     id: String(val(quiz, "id", "quizId", "_id") ?? ""),
@@ -58,8 +74,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       quizId: params.id,
       type: String(val(qq, "type") ?? "single"),
       text: String(val(qq, "text") ?? ""),
-      options: Array.isArray(val(qq, "options")) ? val(qq, "options") : [],
-      correctAnswers: Array.isArray(val(qq, "correctAnswers")) ? val(qq, "correctAnswers") : [],
+      options: parseJsonArray(val(qq, "options")),
+      correctAnswers: parseJsonArray(val(qq, "correctAnswers")),
       explanation: val<string>(qq, "explanation") ?? null,
       order: Number(val(qq, "order") ?? 0),
     }))
@@ -101,7 +117,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const delQ = await robleDbDelete({ tableName: QUESTION_TABLE, token, where: { quizId: params.id } })
     if (!delQ.success) return NextResponse.json({ error: delQ.error ?? "Error limpiando preguntas" }, { status: delQ.status ?? 500 })
 
-    const records = questions.map((qq: any, i: number) => ({ quizId: params.id, type: qq.type, text: qq.text, options: qq.options ?? [], correctAnswers: qq.correctAnswers ?? [], explanation: qq.explanation ?? null, order: i }))
+    const records = questions.map((qq: any, i: number) => ({ quizId: params.id, type: qq.type, text: qq.text, options: jsonText(qq.options), correctAnswers: jsonText(qq.correctAnswers), explanation: qq.explanation ?? null, order: i }))
     if (records.length > 0) {
       const insQ = await robleDbInsert({ tableName: QUESTION_TABLE, token, records })
       if (!insQ.success) return NextResponse.json({ error: insQ.error ?? "Error guardando preguntas" }, { status: insQ.status ?? 500 })

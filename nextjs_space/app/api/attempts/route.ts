@@ -22,6 +22,17 @@ function val<T = any>(row: any, ...keys: string[]): T | undefined {
   return undefined
 }
 
+function parseJsonArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value
+  if (typeof value !== "string") return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const userId = (session?.user as any)?.id as string | undefined
@@ -45,8 +56,7 @@ export async function POST(req: NextRequest) {
   const detailed = questions.map((q: any, i: number) => {
     const ans = answers?.[i] ?? { selected: [], timeMs: 0 }
     const sel: number[] = Array.isArray(ans.selected) ? [...ans.selected].sort() : []
-    const truthRaw: any = val(q, "correctAnswers")
-    const truth: number[] = Array.isArray(truthRaw) ? [...truthRaw].sort() : []
+    const truth: number[] = parseJsonArray(val(q, "correctAnswers")).map((n: any) => Number(n)).sort()
     const isCorrect = sel.length === truth.length && sel.every((v, idx) => v === truth[idx])
     if (isCorrect) correct++
     return {

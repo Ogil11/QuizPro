@@ -22,6 +22,11 @@ function val<T = any>(row: any, ...keys: string[]): T | undefined {
   return undefined
 }
 
+function jsonText(value: unknown) {
+  if (typeof value === "string") return value
+  return JSON.stringify(value ?? [])
+}
+
 function mapQuiz(row: any, questionsCount: number, attemptsCount: number) {
   return {
     id: String(val(row, "id", "quizId", "_id") ?? ""),
@@ -108,7 +113,7 @@ export async function POST(req: NextRequest) {
     const insertedQuiz = Array.isArray((quizIns as any)?.inserted) ? (quizIns as any).inserted[0] : undefined
     const quizId = String(val(insertedQuiz, "id", "quizId", "_id") ?? body.id ?? crypto.randomUUID())
 
-    const questionRecords = questions.map((q: any, i: number) => ({ quizId, type: q.type, text: q.text, options: q.options ?? [], correctAnswers: q.correctAnswers ?? [], explanation: q.explanation ?? null, order: i }))
+    const questionRecords = questions.map((q: any, i: number) => ({ quizId, type: q.type, text: q.text, options: jsonText(q.options), correctAnswers: jsonText(q.correctAnswers), explanation: q.explanation ?? null, order: i }))
     const qIns = await robleDbInsert({ tableName: QUESTION_TABLE, token, records: questionRecords })
     if (!qIns.success) return NextResponse.json({ error: qIns.error ?? "Error creando preguntas" }, { status: qIns.status ?? 500 })
 
