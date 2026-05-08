@@ -82,6 +82,9 @@ async function requestRobleData(
           if (options?.debug && (res.status === 401 || res.status === 403)) {
             return { success: false, error: err, status: res.status, debug }
           }
+          if (options?.debug && res.status === 500 && text.includes('column "undefined" does not exist')) {
+            return { success: false, error: err, status: res.status, debug }
+          }
           if (firstError === "Roble request failed") {
             firstError = err
             firstStatus = res.status
@@ -260,6 +263,31 @@ function whereVariants(where?: Record<string, any>) {
 
 function primaryKeyValue(where?: Record<string, any>) {
   return where?._id ?? where?.id
+}
+
+function malformedWhereError(tableName: string, where?: Record<string, any>) {
+  const keys = Object.keys(where ?? {})
+  const badKey = keys.find((key) => key === "undefined" || key.trim() === "")
+  if (badKey) {
+    return {
+      success: false,
+      error: `Delete aborted: invalid where key "${badKey}" for ${tableName}`,
+      status: 400,
+      debug: { tableName, where },
+    }
+  }
+
+  const id = primaryKeyValue(where)
+  if (id === undefined || id === null || String(id).trim() === "") {
+    return {
+      success: false,
+      error: `Delete aborted: ${tableName} delete requires where._id`,
+      status: 400,
+      debug: { tableName, where },
+    }
+  }
+
+  return null
 }
 
 function uniqueRecordSets(recordSets: Record<string, any>[][]) {
@@ -443,25 +471,23 @@ export async function robleDbDelete(args: {
   token: string
   where?: Record<string, any>
 }) {
+  const invalid = malformedWhereError(args.tableName, args.where)
+  if (invalid) return invalid
+
   let firstErr: any = null
 
   for (const tableName of tableNameVariants(args.tableName)) {
-    for (const where of whereVariants(args.where)) {
-      const id = primaryKeyValue(where)
-      const payloads = [
-        { tableName, where },
-        { tableName, filters: where },
-        ...(id !== undefined && id !== null ? [
-          { tableName, id },
-          { tableName, _id: id },
-          { tableName, ids: [id] },
-          { tableName, records: [{ _id: id }] },
-        ] : []),
-      ]
-      const result = await requestRobleData("delete", payloads, args.token, { methods: ["POST", "DELETE"], debug: true })
-      if (result.success) return result
-      if (!firstErr) firstErr = result
-    }
+    const id = primaryKeyValue(args.where)
+    const where = { _id: id }
+    const payloads = [
+      { tableName, where },
+      { tableName, filters: where },
+    ]
+    const result = await requestRobleData("delete", payloads, args.token, { methods: ["POST"], debug: true })
+    if (result.success) return result
+    const raw = String((result as any)?.debug?.rawResponseBody ?? result.error ?? "")
+    if (result.status === 500 && raw.includes('column "undefined" does not exist')) return result
+    if (!firstErr) firstErr = result
   }
   return firstErr ?? { success: false, error: "Delete failed", status: 500 }
 }

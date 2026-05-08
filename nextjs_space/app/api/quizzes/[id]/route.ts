@@ -66,7 +66,14 @@ async function deleteQuestionsForQuiz(quizId: string, token: string) {
 
   for (const question of qRes.rows ?? []) {
     const questionId = String(val(question, "_id", "id") ?? "")
-    if (!questionId) continue
+    if (!questionId) {
+      return {
+        success: false,
+        error: "No se pudo eliminar una pregunta porque no tiene _id",
+        status: 400,
+        debug: { quizId, question },
+      }
+    }
 
     const where = { _id: questionId }
     debugLog("question delete start", { quizId, questionId, tableName: QUESTION_TABLE, where })
