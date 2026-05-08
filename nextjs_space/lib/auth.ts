@@ -1,7 +1,5 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import bcrypt from "bcryptjs"
-import { prisma } from "./db"
 import { robleLogin } from "@/src/features/auth/roble-client"
 
 export const authOptions: NextAuthOptions = {
@@ -17,42 +15,20 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
         const email = credentials.email.toLowerCase()
-        let user = null as Awaited<ReturnType<typeof prisma.user.findUnique>>
 
         try {
-          user = await prisma.user.findUnique({ where: { email } })
-        } catch {}
+          const roble = await robleLogin(email, credentials.password)
+          if (!roble?.success) return null
 
-        if (!user || !user.password) {
-          try {
-            const roble = await robleLogin(email, credentials.password)
-            if (roble?.success) {
-              try {
-                user = await prisma.user.upsert({
-                  where: { email },
-                  create: {
-                    email,
-                    name: roble.user?.name ?? email.split("@")[0],
-                    robleToken: roble.accessToken,
-                    robleUserId: roble.user?.id ?? null,
-                    provider: "roble",
-                  },
-                  update: { robleToken: roble.accessToken },
-                })
-                return { id: user.id, email: user.email, name: user.name ?? "" }
-              } catch {}
-              return {
-                id: roble.user?.id ?? `roble:${email}`,
-                email,
-                name: roble.user?.name ?? email.split("@")[0],
-              }
-            }
-          } catch {}
+          return {
+            id: roble.user?.id ?? `roble:${email}`,
+            email,
+            name: roble.user?.name ?? email.split("@")[0],
+            robleAccessToken: roble.accessToken,
+          }
+        } catch {
+          return null
         }
-        if (!user || !user.password) return null
-        const ok = await bcrypt.compare(credentials.password, user.password)
-        if (!ok) return null
-        return { id: user.id, email: user.email, name: user.name ?? "" }
       },
     }),
     // TODO: feature/auth (Alberto) - Google OAuth provider
@@ -60,11 +36,15 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.id = (user as any).id
+      if (user) {
+        token.id = (user as any).id
+        token.robleAccessToken = (user as any).robleAccessToken
+      }
       return token
     },
     async session({ session, token }) {
       if (session.user && token.id) (session.user as any).id = token.id
+      if (session.user && token.robleAccessToken) (session.user as any).robleAccessToken = token.robleAccessToken
       return session
     },
   },
