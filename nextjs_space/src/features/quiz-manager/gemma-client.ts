@@ -1,5 +1,4 @@
-// Gemma 4 via Ollama - generación de preguntas (con fallback a Abacus LLM API)
-// Si Ollama local no está disponible, hacemos fallback a la Abacus Chat Completions API.
+// Gemma local mediante Ollama
 
 export interface GeneratedQuestion {
   type: "single" | "multiple" | "truefalse"
@@ -9,71 +8,210 @@ export interface GeneratedQuestion {
   explanation?: string
 }
 
-const GEMMA_URL = process.env.GEMMA_API_URL ?? "http://localhost:11434"
-const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma2:4b"
+const GEMMA_URL =
+  process.env.GEMMA_API_URL ??
+  "http://localhost:11434"
 
-function buildPrompt(topic: string, count: number, difficulty: string, types: string[]): string {
-  return `Genera ${count} preguntas de quiz en ESPAÑOL sobre el tema: "${topic}".
-Dificultad: ${difficulty}. Tipos permitidos: ${types.join(", ")}.
+const GEMMA_MODEL =
+  process.env.GEMMA_MODEL ??
+  "gemma:2b"
 
-Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra) con esta forma:
+function buildPrompt(
+  topic: string,
+  count: number,
+  difficulty: string,
+  types: string[]
+): string {
+
+  return `
+Genera ${count} preguntas de quiz EN ESPAÑOL.
+
+Tema:
+${topic}
+
+Dificultad:
+${difficulty}
+
+Tipos permitidos:
+${types.join(", ")}
+
+IMPORTANTE:
+
+- Devuelve SOLO JSON válido
+- NO markdown
+- NO texto extra
+- NO explicaciones fuera del JSON
+
+Formato EXACTO:
+
 {
   "questions": [
     {
-      "type": "single" | "multiple" | "truefalse",
-      "text": "texto de la pregunta",
-      "options": ["opción 1", "opción 2", ...],
+      "type": "single",
+      "text": "Pregunta",
+      "options": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
       "correctAnswers": [0],
-      "explanation": "breve explicación"
+      "explanation": "Explicación"
     }
   ]
 }
 
-Reglas:
-- single: 4 opciones, 1 índice correcto.
-- multiple: 4 opciones, 2-3 índices correctos.
-- truefalse: opciones ["Verdadero","Falso"], 1 índice correcto.
-- Los índices son base 0.`
+REGLAS:
+
+- single:
+  - EXACTAMENTE 4 opciones
+  - SOLO 1 correcta
+
+- multiple:
+  - EXACTAMENTE 4 opciones
+  - 2 o más correctas
+
+- truefalse:
+  - options DEBE ser:
+    ["Verdadero", "Falso"]
+
+  - SOLO una correcta
+
+- correctAnswers usa índices base 0
+`
 }
 
-async function tryGemma(prompt: string): Promise<string | null> {
+async function tryGemma(
+  prompt: string
+): Promise<string | null> {
+
   try {
-    const ctrl = new AbortController()
-    const t = setTimeout(() => ctrl.abort(), 4000)
-    const res = await fetch(`${GEMMA_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: GEMMA_MODEL, prompt, stream: false, format: "json" }),
-      signal: ctrl.signal,
-    })
-    clearTimeout(t)
-    if (!res.ok) return null
-    const data = await res.json()
+
+    const controller = new AbortController()
+
+    const timeout = setTimeout(() => {
+      controller.abort()
+    }, 300000)
+
+    const response = await fetch(
+      `${GEMMA_URL}/api/generate`,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          model: GEMMA_MODEL,
+          prompt,
+          stream: false,
+        }),
+
+        signal: controller.signal,
+      }
+    )
+
+    clearTimeout(timeout)
+
+    if (!response.ok) {
+
+      const errorText = await response.text()
+
+      console.error(
+        "Error Ollama:",
+        errorText
+      )
+
+      return null
+    }
+
+    const data = await response.json()
+
     return data?.response ?? null
-  } catch {
+
+  } catch (error) {
+
+    console.error(
+      "Error conectando con Gemma:",
+      error
+    )
+
     return null
   }
 }
 
-async function tryAbacus(prompt: string): Promise<string | null> {
-  const key = process.env.ABACUSAI_API_KEY
-  if (!key) return null
-  try {
-    const res = await fetch("https://apps.abacus.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: "gpt-5.4-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 2500,
-      }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.choices?.[0]?.message?.content ?? null
-  } catch {
-    return null
+function normalizeQuestion(q: any): GeneratedQuestion {
+
+  let type =
+    q?.type === "multiple" ||
+    q?.type === "truefalse"
+      ? q.type
+      : "single"
+
+  let options = Array.isArray(q?.options)
+    ? q.options.map((o: any) => String(o))
+    : []
+
+  let correctAnswers = Array.isArray(q?.correctAnswers)
+    ? q.correctAnswers.map((n: any) => Number(n))
+    : [0]
+
+  // FIX TRUE/FALSE
+  if (type === "truefalse") {
+
+    options = ["Verdadero", "Falso"]
+
+    if (
+      correctAnswers.length === 0 ||
+      correctAnswers[0] > 1
+    ) {
+      correctAnswers = [0]
+    }
+  }
+
+  // FIX SINGLE
+  if (type === "single") {
+
+    while (options.length < 4) {
+      options.push(`Opción ${options.length + 1}`)
+    }
+
+    options = options.slice(0, 4)
+
+    correctAnswers = [
+      correctAnswers[0] ?? 0
+    ]
+  }
+
+  // FIX MULTIPLE
+  if (type === "multiple") {
+
+    while (options.length < 4) {
+      options.push(`Opción ${options.length + 1}`)
+    }
+
+    options = options.slice(0, 4)
+
+    if (correctAnswers.length < 2) {
+      correctAnswers = [0, 1]
+    }
+  }
+
+  return {
+
+    type,
+
+    text: String(q?.text ?? ""),
+
+    options,
+
+    correctAnswers,
+
+    explanation:
+      q?.explanation
+        ? String(q.explanation)
+        : undefined,
   }
 }
 
@@ -81,22 +219,62 @@ export async function generateQuestions(
   topic: string,
   count: number,
   difficulty: string = "medium",
-  types: string[] = ["single", "multiple", "truefalse"]
-): Promise<GeneratedQuestion[]> {
-  const prompt = buildPrompt(topic, count, difficulty, types)
-  let raw = await tryGemma(prompt)
-  if (!raw) raw = await tryAbacus(prompt)
-  if (!raw) throw new Error("No se pudo generar preguntas (Gemma y fallback no disponibles)")
+  types: string[] = [
+    "single",
+    "multiple",
+    "truefalse",
+  ]
 
-  // Strip code fences just in case
-  raw = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim()
-  const parsed = JSON.parse(raw)
-  const arr = Array.isArray(parsed?.questions) ? parsed.questions : []
-  return arr.map((q: any) => ({
-    type: q?.type ?? "single",
-    text: String(q?.text ?? ""),
-    options: Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : [],
-    correctAnswers: Array.isArray(q?.correctAnswers) ? q.correctAnswers.map((n: any) => Number(n)) : [],
-    explanation: q?.explanation ? String(q.explanation) : undefined,
-  }))
+): Promise<GeneratedQuestion[]> {
+
+  const prompt = buildPrompt(
+    topic,
+    count,
+    difficulty,
+    types
+  )
+
+  const raw = await tryGemma(prompt)
+
+  if (!raw) {
+    throw new Error(
+      "Gemma local no está disponible"
+    )
+  }
+
+  try {
+
+    const cleaned = raw
+      .trim()
+      .replace(/^```json/i, "")
+      .replace(/^```/i, "")
+      .replace(/```$/i, "")
+      .trim()
+
+    const parsed = JSON.parse(cleaned)
+
+    const questions = Array.isArray(
+      parsed?.questions
+    )
+      ? parsed.questions
+      : []
+
+    return questions.map(normalizeQuestion)
+
+  } catch (error) {
+
+    console.error(
+      "Error parseando JSON:",
+      error
+    )
+
+    console.error(
+      "Respuesta recibida:",
+      raw
+    )
+
+    throw new Error(
+      "Gemma devolvió un JSON inválido"
+    )
+  }
 }
