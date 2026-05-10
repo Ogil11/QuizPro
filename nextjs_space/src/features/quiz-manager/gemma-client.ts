@@ -1,3 +1,14 @@
+import { validateQuestions } from "./validators"
+
+import {
+  safeJsonParse
+} from "./json-utils"
+
+
+import {
+  postProcessQuestions
+} from "./post-processing"
+
 // Gemma local mediante Ollama
 
 export interface GeneratedQuestion {
@@ -26,6 +37,8 @@ function buildPrompt(
   return `
 Genera ${count} preguntas de quiz EN ESPAÑOL.
 
+Eres un generador profesional de preguntas educativas.
+
 Tema:
 ${topic}
 
@@ -35,12 +48,71 @@ ${difficulty}
 Tipos permitidos:
 ${types.join(", ")}
 
+OBJETIVO:
+
+Genera preguntas educativas de alta calidad,
+claras, variadas y útiles para aprendizaje real.
+
+REGLAS DE CALIDAD:
+
+- Evita preguntas ambiguas
+- Evita preguntas triviales
+- Evita repetir estructuras
+- Varía la redacción entre preguntas
+- No repitas respuestas correctas
+- Las preguntas deben sonar naturales
+- No uses frases como:
+  "Según el texto"
+  "La opción correcta es"
+  "Todas las anteriores"
+
+DISTRACTORES:
+
+Las opciones incorrectas deben:
+
+- ser plausibles
+- pertenecer al mismo tema
+- tener longitud similar
+- no ser absurdas
+- no revelar fácilmente la respuesta correcta
+
+EXPLICACIONES:
+
+- Explica por qué la respuesta correcta es correcta
+- Sé claro y breve
+- Máximo 3 frases
+- La explicación debe ayudar al aprendizaje
+
+DIFICULTAD:
+
+easy:
+- preguntas directas
+- memoria básica
+- definiciones simples
+- reconocimiento básico
+
+medium:
+- comprensión
+- comparación
+- aplicación de conceptos
+- relaciones entre ideas
+
+hard:
+- razonamiento
+- análisis
+- inferencia
+- aplicación avanzada
+- múltiples conceptos combinados
+
 IMPORTANTE:
 
 - Devuelve SOLO JSON válido
 - NO markdown
 - NO texto extra
+- NO comentarios
 - NO explicaciones fuera del JSON
+- NO uses comillas triples
+- NO uses bloques de código
 
 Formato EXACTO:
 
@@ -78,6 +150,15 @@ REGLAS:
   - SOLO una correcta
 
 - correctAnswers usa índices base 0
+
+VALIDACIONES IMPORTANTES:
+
+- Todas las preguntas deben tener texto
+- Todas las opciones deben ser diferentes
+- No repitas preguntas
+- No repitas exactamente las mismas opciones
+- No dejes campos vacíos
+- explanation es obligatorio
 `
 }
 
@@ -227,54 +308,96 @@ export async function generateQuestions(
 
 ): Promise<GeneratedQuestion[]> {
 
-  const prompt = buildPrompt(
-    topic,
-    count,
-    difficulty,
-    types
+  const MAX_RETRIES = 3
+
+  let lastError: unknown = null
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_RETRIES;
+    attempt++
+  ) {
+
+    try {
+
+      console.log(
+        `[gemma] generation attempt ${attempt}`
+      )
+
+      const prompt = buildPrompt(
+        topic,
+        count,
+        difficulty,
+        types
+      )
+
+      const raw = await tryGemma(prompt)
+
+      if (!raw) {
+
+        throw new Error(
+          "Gemma local no está disponible"
+        )
+      }
+
+      const parsed =
+        safeJsonParse(raw)
+
+      if (!parsed) {
+
+        throw new Error(
+          "JSON inválido"
+        )
+      }
+
+      const questions = Array.isArray(
+        parsed?.questions
+      )
+        ? parsed.questions
+        : []
+
+      const normalized =
+        questions.map(normalizeQuestion)
+
+      const validated =
+        validateQuestions(normalized)
+
+      console.log(
+        `[gemma] validated questions: ${validated.length}/${count}`
+      )
+
+      // ACCEPT IF ENOUGH QUESTIONS
+      if (
+        validated.length >=
+        Math.max(1, count * 0.7)
+      ) {
+        
+        const finalQuestions =
+          postProcessQuestions(
+            validated
+          )
+
+        return finalQuestions.slice(0, count)
+      }
+
+      throw new Error(
+        `Muy pocas preguntas válidas (${validated.length})`
+      )
+
+    } catch (error) {
+
+      lastError = error
+
+      console.error(
+        `[gemma] attempt failed ${attempt}`,
+        error
+      )
+    }
+  }
+
+  throw new Error(
+    lastError instanceof Error
+      ? lastError.message
+      : "No se pudieron generar preguntas válidas"
   )
-
-  const raw = await tryGemma(prompt)
-
-  if (!raw) {
-    throw new Error(
-      "Gemma local no está disponible"
-    )
-  }
-
-  try {
-
-    const cleaned = raw
-      .trim()
-      .replace(/^```json/i, "")
-      .replace(/^```/i, "")
-      .replace(/```$/i, "")
-      .trim()
-
-    const parsed = JSON.parse(cleaned)
-
-    const questions = Array.isArray(
-      parsed?.questions
-    )
-      ? parsed.questions
-      : []
-
-    return questions.map(normalizeQuestion)
-
-  } catch (error) {
-
-    console.error(
-      "Error parseando JSON:",
-      error
-    )
-
-    console.error(
-      "Respuesta recibida:",
-      raw
-    )
-
-    throw new Error(
-      "Gemma devolvió un JSON inválido"
-    )
-  }
 }
