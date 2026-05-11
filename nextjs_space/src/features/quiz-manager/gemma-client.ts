@@ -10,7 +10,7 @@ export interface GeneratedQuestion {
 }
 
 const GEMMA_URL = process.env.GEMMA_API_URL ?? "http://localhost:11434"
-const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma2:4b"
+const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma4:e4b"
 
 function buildPrompt(topic: string, count: number, difficulty: string, types: string[]): string {
   return `Genera ${count} preguntas de quiz en ESPAÑOL sobre el tema: "${topic}".
@@ -39,7 +39,7 @@ Reglas:
 async function tryGemma(prompt: string): Promise<string | null> {
   try {
     const ctrl = new AbortController()
-    const t = setTimeout(() => ctrl.abort(), 4000)
+    const t = setTimeout(() => ctrl.abort(), 8000)
     const res = await fetch(`${GEMMA_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
