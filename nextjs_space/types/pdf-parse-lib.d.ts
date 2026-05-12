@@ -1,0 +1,13 @@
+declare module "pdf-parse/lib/pdf-parse.js" {
+  interface PdfParseResult {
+    text: string
+    info?: {
+      Title?: string
+      [key: string]: unknown
+    }
+  }
+
+  function pdfParse(buffer: Buffer): Promise<PdfParseResult>
+
+  export = pdfParse
+}

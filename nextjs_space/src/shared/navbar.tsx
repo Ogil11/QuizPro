@@ -2,7 +2,7 @@
 import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Brain, LogOut, User as UserIcon, BookOpen, Plus } from "lucide-react"
+import { Brain, Database, LogOut, User as UserIcon, BookOpen, Plus } from "lucide-react"
 
 export function Navbar() {
   const { data: session, status } = useSession() || {}
@@ -19,6 +19,7 @@ export function Navbar() {
           {status === "authenticated" ? (
             <>
               <Link href="/dashboard"><Button variant="ghost" size="sm"><BookOpen className="h-4 w-4 mr-1.5"/>Quizzes</Button></Link>
+              <Link href="/documents"><Button variant="ghost" size="sm"><Database className="h-4 w-4 mr-1.5"/>Docs</Button></Link>
               <Link href="/quiz/new"><Button variant="ghost" size="sm"><Plus className="h-4 w-4 mr-1.5"/>Crear</Button></Link>
               <Link href="/profile"><Button variant="ghost" size="sm"><UserIcon className="h-4 w-4 mr-1.5"/>{user?.name?.split(" ")[0] ?? "Perfil"}</Button></Link>
               <Button variant="outline" size="sm" onClick={() => signOut({ callbackUrl: "/" })}><LogOut className="h-4 w-4"/></Button>

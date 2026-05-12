@@ -1,6 +1,5 @@
 import { JSDOM } from "jsdom"
 import { Readability } from "@mozilla/readability"
-import { PDFParse } from "pdf-parse"
 
 export type ExtractedContentSource =
   | {
@@ -68,19 +67,13 @@ function extractReadableText(html: string, url?: string) {
 }
 
 async function extractPdf(buffer: Buffer) {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) })
-  try {
-    const [textResult, infoResult] = await Promise.all([
-      parser.getText(),
-      parser.getInfo().catch(() => null),
-    ])
+  const pdfModule = await import("pdf-parse/lib/pdf-parse.js")
+  const pdfParse = pdfModule.default ?? pdfModule
+  const parsed = await pdfParse(buffer)
 
-    return {
-      text: textResult.text,
-      title: infoResult?.info?.Title as string | undefined,
-    }
-  } finally {
-    await parser.destroy().catch(() => undefined)
+  return {
+    text: parsed.text,
+    title: parsed.info?.Title as string | undefined,
   }
 }
 
