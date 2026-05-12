@@ -27,6 +27,7 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
   const [questions, setQuestions] = useState<QuestionDraft[]>(initial?.questions ?? [emptyQ()])
   const [aiTopic, setAiTopic] = useState("")
   const [aiCount, setAiCount] = useState(5)
+  const [aiUseRag, setAiUseRag] = useState(true)
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -54,7 +55,7 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
     try {
       const res = await fetch("/api/quizzes/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: aiTopic, count: aiCount, difficulty }),
+        body: JSON.stringify({ topic: aiTopic, count: aiCount, difficulty, useRag: aiUseRag }),
       })
       const text = await res.text()
       let data: any = {}
@@ -67,7 +68,8 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
       const newQs = (data.questions ?? []) as QuestionDraft[]
       if (mode === "ai") setQuestions(newQs.length ? newQs : [emptyQ()])
       else setQuestions(qs => [...qs.filter(q => q.text), ...newQs])
-      toast.success(`${newQs.length} preguntas generadas`)
+      const ragText = data?.rag?.used ? ` con ${data.rag.chunks} fragmentos RAG` : ""
+      toast.success(`${newQs.length} preguntas generadas${ragText}`)
     } catch (e: any) { toast.error(e.message ?? "Error generando") }
     finally { setBusy(false) }
   }
@@ -158,6 +160,10 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
             <div className="space-y-2"><Label>Tema o contenido</Label><Input value={aiTopic} onChange={e=>setAiTopic(e.target.value)} placeholder="Ej: ciclo de vida del agua"/></div>
             <div className="space-y-2"><Label>Cantidad</Label><Input type="number" min={1} max={15} value={aiCount} onChange={e=>setAiCount(Number(e.target.value))}/></div>
             <Button onClick={generateWithAI} disabled={busy}><Wand2 className="h-4 w-4 mr-2"/>{busy?"Generando...":"Generar"}</Button>
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <Switch checked={aiUseRag} onCheckedChange={setAiUseRag}/>
+            <Label className="!mb-0 text-sm">Usar documentos RAG</Label>
           </div>
           <p className="text-xs text-muted-foreground mt-2">Si Gemma local no está disponible, se usa el modelo cloud como respaldo.</p>
         </div>
