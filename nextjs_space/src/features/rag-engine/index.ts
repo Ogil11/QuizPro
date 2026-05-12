@@ -139,14 +139,42 @@ export async function queryRAG(
             config.embeddingModel
         ).then((embeddings) => embeddings[0])
 
-        // 2. Obtiene todos los chunks del usuario (busca por documentId asociado a usuario)
-        // Si hay userId, filtramos chunks de documentos del usuario
-        // Para esto necesitamos leer todos los chunks completados
+        let allowedDocumentIds: Set<string> | undefined
+        if (userId) {
+            const docsResult = await robleDbRead({
+                tableName: "Document",
+                token: accessToken,
+                where: { userId },
+            })
+
+            if (!docsResult.success || !docsResult.rows) {
+                return {
+                    chunks: [],
+                    context: "",
+                    totalDistance: 0,
+                }
+            }
+
+            allowedDocumentIds = new Set(
+                docsResult.rows
+                    .filter((row: any) => row.status === "completed")
+                    .map((row: any) => row._id || row.id)
+                    .filter(Boolean)
+            )
+
+            if (allowedDocumentIds.size === 0) {
+                return {
+                    chunks: [],
+                    context: "",
+                    totalDistance: 0,
+                }
+            }
+        }
+
+        // 2. Obtiene chunks y filtra por documentos permitidos del usuario
         const readResult = await robleDbRead({
             tableName: "DocumentChunk",
             token: accessToken,
-            // Nota: Roble puede no soportar JOINs complejos via read simple
-            // Por ahora obtenemos todos los chunks completados
         })
 
         if (!readResult.success || !readResult.rows) {
@@ -184,7 +212,9 @@ export async function queryRAG(
             })
             .filter(
                 (chunk): chunk is NonNullable<typeof chunk> =>
-                    chunk !== null && chunk.embedding.length > 0
+                    chunk !== null &&
+                    chunk.embedding.length > 0 &&
+                    (!allowedDocumentIds || allowedDocumentIds.has(chunk.documentId))
             )
 
         if (allChunks.length === 0) {

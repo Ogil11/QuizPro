@@ -77,15 +77,15 @@ export async function GET(req: NextRequest) {
         const limitStr = url.searchParams.get("limit")
         const limit = limitStr ? Math.max(1, Math.min(20, parseInt(limitStr, 10))) : 5
 
-        const userIdFilter = url.searchParams.get("userId")?.trim() || undefined
+        const sessionUserId = (session?.user as any)?.id as string | undefined
 
-        console.log(`[rag:query] Query: "${query}", Limit: ${limit}, UserId: ${userIdFilter || "all"}`)
+        console.log(`[rag:query] Query: "${query}", Limit: ${limit}, UserId: ${sessionUserId || "unknown"}`)
 
         // 3. Ejecuta búsqueda RAG
         const ragResult = await queryRAG(
             query,
             accessToken,
-            userIdFilter,
+            sessionUserId,
             limit,
             DEFAULT_RAG_CONFIG
         )
@@ -152,7 +152,8 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json()
-        const { q: query, limit: limitParam, userId: userIdFilter } = body
+        const { q: query, limit: limitParam } = body
+        const sessionUserId = (session?.user as any)?.id as string | undefined
 
         if (!query || typeof query !== "string" || query.trim().length < 2) {
             return NextResponse.json(
@@ -168,7 +169,7 @@ export async function POST(req: NextRequest) {
         const ragResult = await queryRAG(
             query,
             accessToken,
-            userIdFilter,
+            sessionUserId,
             limit,
             DEFAULT_RAG_CONFIG
         )
