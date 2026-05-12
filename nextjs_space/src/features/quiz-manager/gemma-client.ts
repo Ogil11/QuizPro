@@ -1,5 +1,4 @@
-// Gemma 4 via Ollama - generación de preguntas (con fallback a Abacus LLM API)
-// Si Ollama local no está disponible, hacemos fallback a la Abacus Chat Completions API.
+// Gemma via Ollama - generacion de preguntas con fallback a Abacus LLM API.
 
 export interface GeneratedQuestion {
   type: "single" | "multiple" | "truefalse"
@@ -9,37 +8,72 @@ export interface GeneratedQuestion {
   explanation?: string
 }
 
+export interface GenerateQuestionsOptions {
+  context?: string
+  contextSource?: "rag" | "manual"
+}
+
 const GEMMA_URL = process.env.GEMMA_API_URL ?? "http://localhost:11434"
 const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma4:e4b"
 
-function buildPrompt(topic: string, count: number, difficulty: string, types: string[]): string {
-  return `Genera ${count} preguntas de quiz en ESPAÑOL sobre el tema: "${topic}".
-Dificultad: ${difficulty}. Tipos permitidos: ${types.join(", ")}.
+function trimContext(context?: string) {
+  if (!context) return ""
+  return context
+    .replace(/\u0000/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{4,}/g, "\n\n")
+    .trim()
+    .slice(0, 12000)
+}
 
-Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra) con esta forma:
+function buildPrompt(
+  topic: string,
+  count: number,
+  difficulty: string,
+  types: string[],
+  options: GenerateQuestionsOptions = {}
+): string {
+  const context = trimContext(options.context)
+  const contextBlock = context
+    ? `
+Contexto de documentos del usuario:
+"""
+${context}
+"""
+
+Usa el contexto anterior como fuente principal. Si el contexto no contiene suficiente informacion para una pregunta, genera una pregunta conceptual claramente relacionada con el tema, sin inventar datos especificos no presentes en el contexto.
+`
+    : ""
+
+  return `Genera ${count} preguntas de quiz en ESPANOL sobre el tema: "${topic}".
+Dificultad: ${difficulty}. Tipos permitidos: ${types.join(", ")}.
+${contextBlock}
+Responde EXCLUSIVAMENTE con un JSON valido (sin markdown, sin texto extra) con esta forma:
 {
   "questions": [
     {
       "type": "single" | "multiple" | "truefalse",
       "text": "texto de la pregunta",
-      "options": ["opción 1", "opción 2", ...],
+      "options": ["opcion 1", "opcion 2", ...],
       "correctAnswers": [0],
-      "explanation": "breve explicación"
+      "explanation": "breve explicacion"
     }
   ]
 }
 
 Reglas:
-- single: 4 opciones, 1 índice correcto.
-- multiple: 4 opciones, 2-3 índices correctos.
-- truefalse: opciones ["Verdadero","Falso"], 1 índice correcto.
-- Los índices son base 0.`
+- single: 4 opciones, 1 indice correcto.
+- multiple: 4 opciones, 2-3 indices correctos.
+- truefalse: opciones ["Verdadero","Falso"], 1 indice correcto.
+- Los indices son base 0.
+- Cada pregunta debe ser respondible desde el contexto cuando haya contexto disponible.
+- Evita preguntas ambiguas o que dependan de opiniones.`
 }
 
 async function tryGemma(prompt: string): Promise<string | null> {
   try {
     const ctrl = new AbortController()
-    const t = setTimeout(() => ctrl.abort(), 8000)
+    const t = setTimeout(() => ctrl.abort(), 20000)
     const res = await fetch(`${GEMMA_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -77,26 +111,39 @@ async function tryAbacus(prompt: string): Promise<string | null> {
   }
 }
 
+function normalizeQuestion(q: any): GeneratedQuestion {
+  const type = ["single", "multiple", "truefalse"].includes(q?.type) ? q.type : "single"
+  const options = Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : []
+  const correctAnswers = Array.isArray(q?.correctAnswers)
+    ? q.correctAnswers.map((n: any) => Number(n)).filter((n: number) => Number.isInteger(n) && n >= 0)
+    : []
+
+  return {
+    type,
+    text: String(q?.text ?? ""),
+    options,
+    correctAnswers,
+    explanation: q?.explanation ? String(q.explanation) : undefined,
+  }
+}
+
 export async function generateQuestions(
   topic: string,
   count: number,
   difficulty: string = "medium",
-  types: string[] = ["single", "multiple", "truefalse"]
+  types: string[] = ["single", "multiple", "truefalse"],
+  options: GenerateQuestionsOptions = {}
 ): Promise<GeneratedQuestion[]> {
-  const prompt = buildPrompt(topic, count, difficulty, types)
+  const prompt = buildPrompt(topic, count, difficulty, types, options)
   let raw = await tryGemma(prompt)
   if (!raw) raw = await tryAbacus(prompt)
   if (!raw) throw new Error("No se pudo generar preguntas (Gemma y fallback no disponibles)")
 
-  // Strip code fences just in case
   raw = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim()
   const parsed = JSON.parse(raw)
   const arr = Array.isArray(parsed?.questions) ? parsed.questions : []
-  return arr.map((q: any) => ({
-    type: q?.type ?? "single",
-    text: String(q?.text ?? ""),
-    options: Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : [],
-    correctAnswers: Array.isArray(q?.correctAnswers) ? q.correctAnswers.map((n: any) => Number(n)) : [],
-    explanation: q?.explanation ? String(q.explanation) : undefined,
-  }))
+  return arr.map(normalizeQuestion).filter((q: GeneratedQuestion) => {
+    if (!q.text || q.options.length === 0 || q.correctAnswers.length === 0) return false
+    return q.correctAnswers.every((idx) => idx < q.options.length)
+  })
 }
