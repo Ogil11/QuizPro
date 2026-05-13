@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Brain, Database, LogOut, User as UserIcon, BookOpen, Plus } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export function Navbar() {
   const { data: session, status } = useSession() || {}
@@ -16,6 +17,7 @@ export function Navbar() {
           <span>QuizPro<span className="text-primary">.</span></span>
         </Link>
         <nav className="flex items-center gap-2">
+          <ThemeToggle />
           {status === "authenticated" ? (
             <>
               <Link href="/dashboard"><Button variant="ghost" size="sm"><BookOpen className="h-4 w-4 mr-1.5"/>Quizzes</Button></Link>
