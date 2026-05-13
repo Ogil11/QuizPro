@@ -14,35 +14,51 @@ export async function POST(req: NextRequest) {
     const userId = (session?.user as any)?.id
 
     if (!token || !userId) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+      return NextResponse.json(
+        { error: "No autorizado" },
+        { status: 401 }
+      )
     }
 
     const body = await req.json()
-    const { documentId, count = 5, difficulty = "medium" } = body
+    const {
+      documentId,
+      count = 5,
+      difficulty = "medium",
+    } = body
 
     if (!documentId) {
-      return NextResponse.json({ error: "documentId requerido" }, { status: 400 })
+      return NextResponse.json(
+        { error: "documentId requerido" },
+        { status: 400 }
+      )
     }
 
+    // Verifica que el documento exista y pertenezca al usuario
     const docs = await robleDbRead({
       tableName: "Document",
       token,
-      where: { _id: documentId },
+      where: {
+        _id: documentId,
+        userId,
+      },
     })
 
     if (!docs.success || !docs.rows?.length) {
-      return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Documento no encontrado" },
+        { status: 404 }
+      )
     }
 
     const doc = docs.rows[0]
 
+    // Usa el nombre del documento como query semántica
     const rag = await queryRAG(
       doc.name,
       token,
       userId,
-      6,
-      undefined,
-      documentId
+      6
     )
 
     const questions = await generateQuestions(
@@ -59,13 +75,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       questions,
       rag: {
-        used: true,
+        used: rag.chunks.length > 0,
         chunks: rag.chunks.length,
       },
     })
-  } catch (e: any) {
+  } catch (error: any) {
+    console.error(
+      "[from-document] error:",
+      error
+    )
+
     return NextResponse.json(
-      { error: e?.message ?? "Error generando quiz" },
+      {
+        error:
+          error?.message ??
+          "Error generando quiz desde documento",
+      },
       { status: 500 }
     )
   }
