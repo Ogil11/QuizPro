@@ -1,4 +1,3 @@
-// Gemma via Ollama - generacion de preguntas con fallback a Abacus LLM API.
 import { z } from "zod"
 
 export interface GeneratedQuestion {

@@ -31,8 +31,6 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
-    // TODO: feature/auth (Alberto) - Google OAuth provider
-    // GoogleProvider({ clientId: process.env.GOOGLE_CLIENT_ID!, clientSecret: process.env.GOOGLE_CLIENT_SECRET! })
   ],
   callbacks: {
     async jwt({ token, user }) {

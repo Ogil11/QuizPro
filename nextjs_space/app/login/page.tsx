@@ -39,7 +39,6 @@ export default function LoginPage() {
             <Input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/>
           </div>
           <Button className="w-full" disabled={loading} type="submit">{loading ? "Ingresando..." : "Ingresar"}</Button>
-          {/* TODO: feature/auth (Alberto) - botón Google OAuth */}
           <p className="text-sm text-center text-muted-foreground">
             ¿No tienes cuenta? <Link href="/signup" className="text-primary font-medium">Regístrate</Link>
           </p>
