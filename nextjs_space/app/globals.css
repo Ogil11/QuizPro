@@ -172,6 +172,7 @@
   }
 
   .dark .neo-panel {
+    background: linear-gradient(145deg, hsl(268 45% 18%), hsl(256 50% 22%));
     box-shadow:
       0 0 0 1px hsl(var(--primary) / 0.18),
       0 14px 40px hsl(270 80% 4% / 0.5),
@@ -185,6 +186,15 @@
   .neo-glow:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 32px hsl(var(--primary) / 0.2), 0 0 0 1px hsl(var(--primary) / 0.3);
+  }
+
+  .neo-glow-purple {
+    transition: transform var(--duration-normal) ease, box-shadow var(--duration-normal) ease;
+  }
+
+  .neo-glow-purple:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgb(168 85 247 / 0.3), 0 0 0 1px rgb(168 85 247 / 0.4);
   }
 
   .reveal-up {
