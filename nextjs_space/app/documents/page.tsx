@@ -16,6 +16,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Trash2,
 } from "lucide-react"
 import { Navbar } from "@/src/shared/navbar"
 import { Button } from "@/components/ui/button"
@@ -69,6 +70,7 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [deletingId, setDeletingId] = useState("")
   const [url, setUrl] = useState("")
   const [query, setQuery] = useState("")
 
@@ -137,6 +139,35 @@ export default function DocumentsPage() {
       toast.error(error?.message || "No se pudo procesar la URL")
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function deleteDocument(doc: DocumentRow) {
+    const id = documentId(doc)
+    if (!id) {
+      toast.error("No se pudo identificar el documento")
+      return
+    }
+
+    const confirmed = window.confirm(`Eliminar "${doc.name || "Documento"}"? Esta accion no se puede deshacer.`)
+    if (!confirmed) return
+
+    setDeletingId(id)
+    try {
+      const res = await fetch("/api/documents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      const data = await readJsonResponse(res)
+      if (!res.ok) throw new Error(data?.message || data?.error || "No se pudo eliminar el documento")
+
+      setDocuments((current) => current.filter((item) => documentId(item) !== id))
+      toast.success("Documento eliminado")
+    } catch (error: any) {
+      toast.error(error?.message || "No se pudo eliminar el documento")
+    } finally {
+      setDeletingId("")
     }
   }
 
@@ -304,6 +335,20 @@ export default function DocumentsPage() {
                           </Button>
                         </Link>
                       ) : null}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => deleteDocument(doc)}
+                        disabled={deletingId === documentId(doc)}
+                        aria-label={`Eliminar ${doc.name || "documento"}`}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {deletingId === documentId(doc) ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
                     </div>
                   </article>
                 )
