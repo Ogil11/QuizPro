@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic"
 const QUIZ_TABLE = process.env.ROBLE_QUIZ_TABLE ?? "Quiz"
 const QUESTION_TABLE = process.env.ROBLE_QUESTION_TABLE ?? "Question"
 const ATTEMPT_TABLE = process.env.ROBLE_ATTEMPT_TABLE ?? "QuizAttempt"
+const ALLOWED_DIFFICULTIES = new Set(["easy", "medium", "hard"])
 
 function snake(k: string) {
   return k.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase()
@@ -116,6 +117,9 @@ export async function POST(req: NextRequest) {
     const { name, description, category, difficulty, isPublic, creationMode, questions } = body
     if (!name || !category || !difficulty || !Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json({ error: "Datos incompletos" }, { status: 400 })
+    }
+    if (!ALLOWED_DIFFICULTIES.has(String(difficulty))) {
+      return NextResponse.json({ error: 'difficulty invalido. Usa "easy", "medium" o "hard"' }, { status: 400 })
     }
 
     const now = new Date().toISOString()

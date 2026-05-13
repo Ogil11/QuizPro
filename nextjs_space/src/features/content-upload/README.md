@@ -1,18 +1,44 @@
-# feature/content-upload (Sebastián) — TODO
+# feature/content-upload
 
-Carga de contenido (PDF, imágenes, links) para alimentar el motor RAG.
+Carga de contenido para alimentar el motor RAG con Roble + Ollama.
 
-## Estado actual (MVP)
-- Modelo `Document` ya en Prisma
-- Endpoint base `/api/documents` (GET/POST stub)
-- Almacenamiento S3 ya configurado (`lib/s3.ts` — TODO)
+## Estado actual
 
-## TODO
-- [ ] Implementar `lib/s3.ts` con presigned URLs (single + multipart)
-- [ ] UI de upload con drag & drop
-- [ ] Extracción de texto:
-  - PDF: enviar base64 al endpoint LLM
-  - Imágenes: visión multimodal
-  - Links: fetch + readability
-- [ ] Persistir `extractedText` en `Document`
-- [ ] Pasar a `feature/rag-engine` para indexar
+- `GET /api/documents`: lista documentos del usuario autenticado.
+- `POST /api/documents` con JSON `{ "url": "https://..." }`: extrae texto de URLs HTML, texto o PDF.
+- `POST /api/documents` con `multipart/form-data` campo `file`: extrae texto de `.txt`, `.md`, `.csv`, `.json`, `.html` y `.pdf`.
+- Persiste `Document` en Roble con `extractedText`.
+- Llama a `processDocument()` para chunking, embeddings y guardado en `DocumentChunk`.
+
+## Ejemplos
+
+URL:
+
+```bash
+curl -X POST http://localhost:3000/api/documents \
+  -H "Content-Type: application/json" \
+  -H "Cookie: [tu_auth_cookie]" \
+  -d "{\"url\":\"https://example.com/article\"}"
+```
+
+Archivo:
+
+```bash
+curl -X POST http://localhost:3000/api/documents \
+  -H "Cookie: [tu_auth_cookie]" \
+  -F "file=@./documento.pdf"
+```
+
+Después de una carga exitosa:
+
+```bash
+curl "http://localhost:3000/api/rag/query?q=tema&limit=3" \
+  -H "Cookie: [tu_auth_cookie]"
+```
+
+## Pendiente
+
+- UI de upload con drag & drop.
+- Almacenamiento real de archivos en S3/Azure en vez de `memory://`.
+- OCR para imágenes escaneadas.
+- Procesamiento asíncrono/background para documentos grandes.

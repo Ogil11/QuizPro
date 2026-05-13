@@ -77,16 +77,35 @@ model QuizAttempt {
 
 // TODO: feature/content-upload (Sebastián)
 model Document {
+  id            String            @id @default(cuid())
+  userId        String
+  name          String
+  type          String            // pdf | image | link
+  storagePath   String?           // S3 cloud_storage_path
+  url           String?
+  extractedText String?           @db.Text
+  processedAt   DateTime?
+  status        String            @default("pending") // pending | processing | completed | failed
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks        DocumentChunk[]
+}
+
+// feature/rag-engine - Chunks semánticos de documentos
+model DocumentChunk {
   id          String   @id @default(cuid())
-  userId      String
-  name        String
-  type        String   // pdf | image | link
-  storagePath String?  // S3 cloud_storage_path
-  url         String?
-  extractedText String? @db.Text
+  documentId  String
+  content     String   @db.Text
+  order       Int      // orden secuencial del chunk
+  tokens      Int      // número aproximado de tokens
+  embedding   Json     // Array de floats: [0.1, 0.2, ...] 
   createdAt   DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  @@index([documentId])
 }
 
 // TODO: feature/ai-feedback (Oscar)

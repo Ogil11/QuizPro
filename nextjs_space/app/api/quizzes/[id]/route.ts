@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic"
 
 const QUIZ_TABLE = process.env.ROBLE_QUIZ_TABLE ?? "Quiz"
 const QUESTION_TABLE = process.env.ROBLE_QUESTION_TABLE ?? "Question"
+const ALLOWED_DIFFICULTIES = new Set(["easy", "medium", "hard"])
 
 function snake(k: string) {
   return k.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase()
@@ -247,6 +248,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await req.json()
   const { name, description, category, difficulty, isPublic, questions } = body
+  if (difficulty !== undefined && !ALLOWED_DIFFICULTIES.has(String(difficulty))) {
+    return NextResponse.json({ error: 'difficulty invalido. Usa "easy", "medium" o "hard"' }, { status: 400 })
+  }
 
   const updates: Record<string, any> = {
     name: name ?? val(existing, "name", "title") ?? "",
