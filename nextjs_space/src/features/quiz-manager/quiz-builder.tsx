@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
@@ -86,9 +86,26 @@ export function QuizBuilder({
 
   const [aiTopic, setAiTopic] = useState("")
   const [aiCount, setAiCount] = useState(10)
+  const [aiUseRag, setAiUseRag] = useState(true)
+
+  const [documents, setDocuments] = useState<any[]>([])
+  const [selectedDocument, setSelectedDocument] = useState("")
 
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    async function loadDocuments() {
+      try {
+        const res = await fetch("/api/documents")
+        const data = await res.json()
+        setDocuments(data.documents ?? [])
+      } catch {
+        setDocuments([])
+      }
+    }
+    loadDocuments()
+  }, [])
 
   function updateQ(
     i: number,
@@ -169,8 +186,8 @@ export function QuizBuilder({
 
   async function generateWithAI() {
 
-    if (!aiTopic) {
-      toast.error("Indica el tema")
+    if (!selectedDocument && !aiTopic) {
+      toast.error("Indica tema o selecciona documento")
       return
     }
 
@@ -178,18 +195,32 @@ export function QuizBuilder({
 
     try {
 
-      const res = await fetch("/api/quizzes/generate", {
+      const useDocumentFlow = aiUseRag && !!selectedDocument
+
+      const endpoint = useDocumentFlow
+        ? "/api/quizzes/from-document"
+        : "/api/quizzes/generate"
+
+      const body = useDocumentFlow
+        ? {
+          documentId: selectedDocument,
+          count: aiCount,
+          difficulty,
+        }
+        : {
+          topic: aiTopic,
+          count: aiCount,
+          difficulty,
+        }
+
+      const res = await fetch(endpoint, {
         method: "POST",
 
         headers: {
           "Content-Type": "application/json",
         },
 
-        body: JSON.stringify({
-          topic: aiTopic,
-          count: aiCount,
-          difficulty,
-        }),
+        body: JSON.stringify(body),
       })
 
       const text = await res.text()
@@ -227,8 +258,12 @@ export function QuizBuilder({
         ])
       }
 
+      const ragText = data?.rag?.used
+        ? ` con ${data.rag.chunks} fragmentos RAG`
+        : ""
+
       toast.success(
-        `${newQuestions.length} preguntas generadas`
+        `${newQuestions.length} preguntas generadas${ragText}`
       )
 
     } catch (e: any) {
@@ -418,6 +453,7 @@ export function QuizBuilder({
               value={category}
               onChange={e => setCategory(e.target.value)}
             />
+
           </div>
 
         </div>
@@ -431,6 +467,30 @@ export function QuizBuilder({
             onChange={e => setDescription(e.target.value)}
           />
 
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4 items-end">
+          <div className="space-y-2">
+            <Label>Dificultad</Label>
+            <Select value={difficulty} onValueChange={setDifficulty}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="easy">Fácil</SelectItem>
+                <SelectItem value="medium">Medio</SelectItem>
+                <SelectItem value="hard">Difícil</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-3 pb-2">
+            <Input
+              type="checkbox"
+              checked={isPublic}
+              onChange={e => setIsPublic(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <Label className="!mb-0">{isPublic ? "Público" : "Privado"}</Label>
+          </div>
         </div>
 
       </div>
@@ -494,14 +554,72 @@ export function QuizBuilder({
 
           </div>
 
+          <div className="flex items-center gap-3 mt-3">
+            <Input
+              type="checkbox"
+              checked={aiUseRag}
+              onChange={e => setAiUseRag(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <Label className="!mb-0 text-sm">Usar documentos RAG</Label>
+          </div>
+
+          {aiUseRag && (
+            <div className="space-y-2 mt-4">
+              <Label>Documento fuente</Label>
+              <Select
+                value={selectedDocument}
+                onValueChange={(docId) => {
+                  setSelectedDocument(docId)
+                  // Auto-llena el tema con el nombre del documento
+                  const selectedDoc = documents.find(d => (d._id || d.id) === docId)
+                  if (selectedDoc?.name) {
+                    setAiTopic(selectedDoc.name)
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un documento" />
+                </SelectTrigger>
+                <SelectContent>
+                  {documents.map((doc) => (
+                    <SelectItem key={doc._id || doc.id} value={doc._id || doc.id}>
+                      {doc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground mt-2">
-            Gemma local puede tardar varios segundos dependiendo de la RAM disponible.
+            Si seleccionas un documento, el quiz se generará usando únicamente su contenido indexado.
           </p>
 
         </div>
       )}
 
       <div className="space-y-6">
+
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-xl font-semibold">
+            Preguntas ({questions.length})
+          </h3>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setQuestions(qs => [...qs, emptyQ()])
+            }
+          >
+
+            <Plus className="h-4 w-4 mr-1.5" />
+            Agregar
+
+          </Button>
+        </div>
 
         {questions.map((q, i) => (
 
@@ -621,46 +739,32 @@ export function QuizBuilder({
 
               {q.type === "multiple"
                 ? "Marca las respuestas correctas. Puedes seleccionar varias."
-                : "Marca las respuestas correctas. Solo una respuesta."}
+                : "Marca la respuesta correcta. Solo una respuesta."}
 
             </p>
 
           </div>
         ))}
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() =>
-            setQuestions(qs => [
-              ...qs,
-              emptyQ(),
-            ])
-          }
-        >
+      </div>
 
-          <Plus className="h-4 w-4 mr-2" />
-
-          Agregar pregunta
-
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => router.back()}>
+          Cancelar
         </Button>
 
-        <div className="flex justify-end">
+        <Button
+          onClick={save}
+          disabled={saving}
+        >
 
-          <Button
-            onClick={save}
-            disabled={saving}
-          >
+          <Save className="h-4 w-4 mr-2" />
 
-            <Save className="h-4 w-4 mr-2" />
+          {saving
+            ? "Guardando..."
+            : "Guardar Quiz"}
 
-            {saving
-              ? "Guardando..."
-              : "Guardar Quiz"}
-
-          </Button>
-
-        </div>
+        </Button>
 
       </div>
 
