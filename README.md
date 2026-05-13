@@ -61,14 +61,23 @@ QuizPro es una aplicación web basada en **Next.js** con las siguientes capacida
 
 ## Capturas de pantalla
 
-Agregue las imágenes representativas en la carpeta `screenshots/` en la raíz del proyecto. A continuación se indican nombres sugeridos para los archivos:
+### Página de inicio de sesión
+![Página de inicio de sesión](./Screenshots/login.png)
 
-- `login.png` — Página de inicio de sesión
-- `dashboard.png` — Vista del panel de cuestionarios
-- `quiz-builder.png` — Constructor de cuestionarios
-- `quiz-play.png` — Interfaz de resolución de cuestionarios
-- `results.png` — Página de resultados y análisis
-- `profile.png` — Perfil de usuario
+### Panel principal (Dashboard)
+![Panel principal](./Screenshots/dashboard.png)
+
+### Constructor de cuestionarios
+![Constructor de cuestionarios](./Screenshots/quiz-builder.png)
+
+### Resolución de cuestionarios
+![Resolución de cuestionarios](./Screenshots/quiz-play.png)
+
+### Resultados y análisis
+![Resultados y análisis](./Screenshots/results.png)
+
+### Perfil de usuario
+![Perfil de usuario](./Screenshots/profile.png)
 
 ---
 
@@ -99,7 +108,6 @@ Asegúrese de contar con las herramientas siguientes instaladas antes de procede
 - PostgreSQL (recomendado si se utiliza Prisma)
 - Ollama (opcional, para uso de modelos locales)
 
-git clone https://github.com/Ogil11/QuizPro.git
 ### Paso 1: clonar el repositorio
 
 ```bash
@@ -188,8 +196,6 @@ npm run start
 
 ---
 
-npx prisma generate
-npx prisma studio
 ## Comandos útiles
 
 ```bash
