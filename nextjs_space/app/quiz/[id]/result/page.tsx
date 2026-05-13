@@ -16,6 +16,7 @@ export default function ResultPage() {
   const router = useRouter()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [showCelebration, setShowCelebration] = useState(false)
   const [feedback, setFeedback] = useState<any>(null)
   const [feedbackLoading, setFeedbackLoading] = useState(false)
   const [feedbackError, setFeedbackError] = useState("")
@@ -88,6 +89,14 @@ export default function ResultPage() {
     }
   }, [attemptId, data?.attempt?.id])
 
+  useEffect(() => {
+    if (loading || !data?.attempt?.id) return
+
+    setShowCelebration(true)
+    const timer = setTimeout(() => setShowCelebration(false), 2600)
+    return () => clearTimeout(timer)
+  }, [loading, data?.attempt?.id])
+
   if (loading && !data) return <div className="min-h-screen"><Navbar/><div className="p-8">Cargando...</div></div>
   if (!data) return <div className="min-h-screen"><Navbar/><div className="p-8">Cargando...</div></div>
 
@@ -106,9 +115,24 @@ export default function ResultPage() {
     <div className="min-h-screen">
       <Navbar/>
       <main className="max-w-[1000px] mx-auto px-4 py-8 space-y-6">
-        <div className="bg-card p-8 rounded-lg shadow-sm text-center">
+        <div className="relative bg-card p-8 rounded-lg shadow-sm text-center overflow-hidden reveal-up">
+          {showCelebration && (
+            <div className="celebration-layer" aria-hidden>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`confetti-piece confetti-tone-${i % 4}`}
+                  style={{
+                    left: `${(i / 24) * 100}%`,
+                    animationDelay: `${(i % 6) * 110}ms`,
+                    transform: `rotate(${(i % 2 === 0 ? 18 : -18) + i}deg)`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           <Trophy className="h-12 w-12 text-primary mx-auto mb-3"/>
-          <h1 className="font-display text-3xl font-bold tracking-tight mb-1">{Math.round(attempt.score)} pts</h1>
+          <h1 className={`font-display text-3xl font-bold tracking-tight mb-1 ${showCelebration ? "score-pop" : ""}`}>{Math.round(attempt.score)} pts</h1>
           <p className="text-muted-foreground">{correct} de {attempt.total} correctas · {attempt.durationSec}s</p>
         </div>
 
@@ -241,6 +265,74 @@ export default function ResultPage() {
           <Link href="/dashboard"><Button>Volver al dashboard</Button></Link>
         </div>
       </main>
+
+      <style jsx>{`
+        .celebration-layer {
+          pointer-events: none;
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          z-index: 0;
+        }
+
+        .confetti-piece {
+          position: absolute;
+          top: -12%;
+          width: 8px;
+          height: 14px;
+          border-radius: 3px;
+          opacity: 0;
+          animation: confetti-fall 1.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        .confetti-tone-0 {
+          background: hsl(272 82% 64% / 0.9);
+        }
+
+        .confetti-tone-1 {
+          background: hsl(250 85% 64% / 0.9);
+        }
+
+        .confetti-tone-2 {
+          background: hsl(190 88% 62% / 0.88);
+        }
+
+        .confetti-tone-3 {
+          background: hsl(325 86% 68% / 0.88);
+        }
+
+        .score-pop {
+          animation: score-pop 650ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        @keyframes confetti-fall {
+          0% {
+            opacity: 0;
+            transform: translate3d(0, 0, 0) rotate(0deg) scale(0.9);
+          }
+          15% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translate3d(-4px, 250px, 0) rotate(220deg) scale(1);
+          }
+        }
+
+        @keyframes score-pop {
+          0% {
+            transform: scale(0.78);
+            opacity: 0;
+          }
+          60% {
+            transform: scale(1.08);
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   )
 }

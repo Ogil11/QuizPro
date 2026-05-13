@@ -308,7 +308,7 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
             </Button>
           </div>
 
-          <div className="flex items-center gap-3 mt-3">
+          <div className="flex items-center gap-3 mt-4">
             <Switch checked={aiUseRag} onCheckedChange={setAiUseRag} />
             <Label className="!mb-0 text-sm">Usar documentos RAG</Label>
           </div>
