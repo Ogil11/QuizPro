@@ -1,5 +1,8 @@
 import { JSDOM } from "jsdom"
 import { Readability } from "@mozilla/readability"
+import fs from "node:fs/promises"
+import path from "node:path"
+import Tesseract from "tesseract.js"
 
 export type ExtractedContentSource =
   | {
@@ -11,6 +14,12 @@ export type ExtractedContentSource =
   | {
       kind: "url"
       url: string
+    }
+  | {
+      kind: "image"
+      fileName: string
+      contentType?: string
+      buffer: Buffer
     }
 
 export interface ExtractedContent {
@@ -48,6 +57,7 @@ function inferType(fileName: string, contentType?: string) {
   const lower = fileName.toLowerCase()
   if (contentType?.includes("pdf") || lower.endsWith(".pdf")) return "pdf"
   if (contentType?.includes("html") || lower.endsWith(".html") || lower.endsWith(".htm")) return "html"
+  if (contentType?.includes("image") || /\.(jpg|jpeg|png|gif|webp)$/i.test(lower)) return "image"
   if (contentType && TEXT_TYPES.has(contentType)) return "text"
   if (/\.(txt|md|markdown|csv|json|xml)$/i.test(lower)) return "text"
   return contentType || "unknown"
@@ -77,7 +87,65 @@ async function extractPdf(buffer: Buffer) {
   }
 }
 
-async function extractFromFile(source: Extract<ExtractedContentSource, { kind: "file" }>): Promise<ExtractedContent> {
+async function getTesseractOptions() {
+  const cachePath = path.join(process.cwd(), ".tesseract-cache")
+  const localLangPath = path.join(process.cwd(), "tessdata")
+
+  await fs.mkdir(cachePath, { recursive: true })
+
+  const hasLocalLangData = await fs
+    .access(localLangPath)
+    .then(() => true)
+    .catch(() => false)
+
+  return {
+    workerPath: path.join(
+      process.cwd(),
+      "node_modules",
+      "tesseract.js",
+      "src",
+      "worker-script",
+      "node",
+      "index.js"
+    ),
+    corePath: path.join(process.cwd(), "node_modules", "tesseract.js-core"),
+    cachePath,
+    cacheMethod: "write",
+    ...(hasLocalLangData ? { langPath: localLangPath } : {}),
+  }
+}
+
+async function extractImage(buffer: Buffer, fileName: string) {
+  let worker: Tesseract.Worker | undefined
+
+  try {
+    worker = await Tesseract.createWorker("spa+eng", 1, await getTesseractOptions())
+    await worker.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+      preserve_interword_spaces: "1",
+    })
+
+    const result = await worker.recognize(buffer)
+    const text = cleanExtractedText(result.data.text || "")
+
+    if (!text) {
+      throw new Error("No readable text found in image")
+    }
+
+    return {
+      text,
+      title: fileName.replace(/\.[^.]+$/, ""),
+    }
+  } catch (error: any) {
+    throw new Error(`OCR extraction failed: ${error?.message || "Unknown error"}`)
+  } finally {
+    await worker?.terminate()
+  }
+}
+
+type FileContentSource = Extract<ExtractedContentSource, { kind: "file" | "image" }>
+
+async function extractFromFile(source: FileContentSource): Promise<ExtractedContent> {
   const contentType = source.contentType
   const type = inferType(source.fileName, contentType)
 
@@ -87,6 +155,21 @@ async function extractFromFile(source: Extract<ExtractedContentSource, { kind: "
       name: source.fileName,
       type,
       extractedText: cleanExtractedText(parsed.text),
+      metadata: {
+        source: "file",
+        contentType,
+        size: source.buffer.length,
+        title: parsed.title,
+      },
+    }
+  }
+
+  if (type === "image") {
+    const parsed = await extractImage(source.buffer, source.fileName)
+    return {
+      name: source.fileName,
+      type,
+      extractedText: parsed.text,
       metadata: {
         source: "file",
         contentType,
@@ -181,7 +264,7 @@ async function extractFromUrl(source: Extract<ExtractedContentSource, { kind: "u
 }
 
 export async function extractContent(source: ExtractedContentSource): Promise<ExtractedContent> {
-  const extracted = source.kind === "file"
+  const extracted = source.kind === "file" || source.kind === "image"
     ? await extractFromFile(source)
     : await extractFromUrl(source)
 
