@@ -103,16 +103,16 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
 
       const body = useDocumentFlow
         ? {
-            documentId: selectedDocument,
-            count: aiCount,
-            difficulty,
-          }
+          documentId: selectedDocument,
+          count: aiCount,
+          difficulty,
+        }
         : {
-            topic: aiTopic,
-            count: aiCount,
-            difficulty,
-            useRag: aiUseRag,
-          }
+          topic: aiTopic,
+          count: aiCount,
+          difficulty,
+          useRag: aiUseRag,
+        }
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -316,7 +316,17 @@ export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: strin
           {aiUseRag && (
             <div className="space-y-2 mt-4">
               <Label>Documento fuente</Label>
-              <Select value={selectedDocument} onValueChange={setSelectedDocument}>
+              <Select
+                value={selectedDocument}
+                onValueChange={(docId) => {
+                  setSelectedDocument(docId)
+                  // Auto-llena el tema con el nombre del documento
+                  const selectedDoc = documents.find(d => (d._id || d.id) === docId)
+                  if (selectedDoc?.name) {
+                    setAiTopic(selectedDoc.name)
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un documento" />
                 </SelectTrigger>
