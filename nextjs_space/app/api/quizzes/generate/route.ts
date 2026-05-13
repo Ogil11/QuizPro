@@ -6,6 +6,8 @@ import { queryRAG } from "@/src/features/rag-engine"
 
 export const dynamic = "force-dynamic"
 
+const ALLOWED_DIFFICULTIES = new Set(["easy", "medium", "hard"])
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
@@ -20,6 +22,9 @@ export async function POST(req: NextRequest) {
       context,
     } = await req.json()
     if (!topic) return NextResponse.json({ error: "topic requerido" }, { status: 400 })
+    if (!ALLOWED_DIFFICULTIES.has(String(difficulty))) {
+      return NextResponse.json({ error: 'difficulty invalido. Usa "easy", "medium" o "hard"' }, { status: 400 })
+    }
 
     const accessToken = (session.user as any)?.robleAccessToken as string | undefined
     const userId = (session.user as any)?.id as string | undefined
