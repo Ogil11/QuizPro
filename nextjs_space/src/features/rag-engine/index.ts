@@ -129,7 +129,8 @@ export async function queryRAG(
     accessToken: string,
     userId?: string,
     limit: number = 5,
-    config: RAGConfig = DEFAULT_RAG_CONFIG
+    config: RAGConfig = DEFAULT_RAG_CONFIG,
+    documentId?: string
 ): Promise<RAGQueryResult> {
     try {
         // 1. Genera embedding de la query
@@ -214,7 +215,8 @@ export async function queryRAG(
                 (chunk): chunk is NonNullable<typeof chunk> =>
                     chunk !== null &&
                     chunk.embedding.length > 0 &&
-                    (!allowedDocumentIds || allowedDocumentIds.has(chunk.documentId))
+                    (!allowedDocumentIds || allowedDocumentIds.has(chunk.documentId)) &&
+                    (!documentId || chunk.documentId === documentId)
             )
 
         if (allChunks.length === 0) {
