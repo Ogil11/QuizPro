@@ -195,9 +195,8 @@ export default function DocumentsPage() {
             }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
-            className={`min-h-[220px] rounded-lg border border-dashed bg-card p-6 shadow-sm transition-colors ${
-              dragging ? "border-primary bg-primary/5" : "border-border"
-            }`}
+            className={`min-h-[220px] rounded-lg border border-dashed bg-card p-6 shadow-sm transition-colors ${dragging ? "border-primary bg-primary/5" : "border-border"
+              }`}
           >
             <div className="flex h-full flex-col items-center justify-center text-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -205,13 +204,13 @@ export default function DocumentsPage() {
               </div>
               <div>
                 <h2 className="font-display text-xl font-semibold">Subir archivo</h2>
-                <p className="text-sm text-muted-foreground">PDF, TXT, Markdown, CSV, JSON o HTML</p>
+                <p className="text-sm text-muted-foreground">PDF, TXT, Markdown, CSV, JSON, HTML o Imágenes</p>
               </div>
               <input
                 ref={inputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.htm,text/plain,text/markdown,text/csv,application/json,text/html,application/pdf"
+                accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.htm,.jpg,.jpeg,.png,.gif,.webp,text/plain,text/markdown,text/csv,application/json,text/html,application/pdf,image/jpeg,image/png,image/gif,image/webp"
                 onChange={(event) => {
                   const file = event.target.files?.[0]
                   if (file) uploadFile(file)

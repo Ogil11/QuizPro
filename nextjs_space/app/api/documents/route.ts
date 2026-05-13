@@ -133,8 +133,10 @@ async function sourceFromFormData(req: NextRequest) {
     throw new Error("Multipart upload requires a 'file' field")
   }
 
+  const isImage = file.type?.startsWith("image/")
+
   return {
-    kind: "file" as const,
+    kind: isImage ? ("image" as const) : ("file" as const),
     fileName: file.name || "uploaded-document",
     contentType: file.type || undefined,
     buffer: Buffer.from(await file.arrayBuffer()),
