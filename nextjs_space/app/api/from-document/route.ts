@@ -67,7 +67,9 @@ export async function POST(req: NextRequest) {
       doc.name,
       token,
       userId,
-      6
+      6,
+      undefined,
+      documentId
     )
 
     const questions = await generateQuestions(
