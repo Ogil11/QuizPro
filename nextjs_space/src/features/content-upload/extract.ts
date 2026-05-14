@@ -217,7 +217,7 @@ async function extractFromUrl(source: Extract<ExtractedContentSource, { kind: "u
       "User-Agent": "QuizPro-RAG/1.0",
       Accept: "text/html,application/xhtml+xml,text/plain,application/pdf;q=0.9,*/*;q=0.8",
     },
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(2000000),
   })
 
   if (!response.ok) {
