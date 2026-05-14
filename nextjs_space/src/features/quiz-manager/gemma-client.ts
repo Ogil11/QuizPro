@@ -1,4 +1,4 @@
-// Gemma via Ollama - generacion de preguntas con fallback a Abacus LLM API.
+// Gemma via Ollama - generacion de preguntas.
 import { z } from "zod"
 
 export interface GeneratedQuestion {
@@ -19,7 +19,10 @@ const QUESTION_TYPES = ["single", "multiple", "truefalse"] as const
 const MAX_ATTEMPTS = 3
 
 const GEMMA_URL = process.env.GEMMA_API_URL ?? "http://localhost:11434"
-const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma4:e4b"
+const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma3:4b"
+const GEMMA_TIMEOUT_MS = Number(process.env.GEMMA_TIMEOUT_MS) || 180000
+const GEMMA_CONTEXT_CHARS = Number(process.env.GEMMA_CONTEXT_CHARS) || 6000
+const GEMMA_BATCH_SIZE = Math.max(1, Math.min(3, Number(process.env.GEMMA_BATCH_SIZE) || 2))
 
 const generatedQuestionSchema = z.object({
   type: z.enum(QUESTION_TYPES),
@@ -40,7 +43,7 @@ function trimContext(context?: string) {
     .replace(/\r\n/g, "\n")
     .replace(/\n{4,}/g, "\n\n")
     .trim()
-    .slice(0, 12000)
+    .slice(0, GEMMA_CONTEXT_CHARS)
 }
 
 function normalizeDifficulty(value: string): (typeof DIFFICULTIES)[number] {
@@ -135,10 +138,10 @@ Reglas:
 - Evita preguntas ambiguas, puramente memoristicas si la dificultad es medium/hard, o que dependan de opiniones.`
 }
 
-async function tryGemma(prompt: string): Promise<string | null> {
+async function requestGemma(prompt: string): Promise<string> {
   try {
     const ctrl = new AbortController()
-    const t = setTimeout(() => ctrl.abort(), 20000)
+    const t = setTimeout(() => ctrl.abort(), GEMMA_TIMEOUT_MS)
     const res = await fetch(`${GEMMA_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -146,33 +149,21 @@ async function tryGemma(prompt: string): Promise<string | null> {
       signal: ctrl.signal,
     })
     clearTimeout(t)
-    if (!res.ok) return null
+    if (!res.ok) {
+      const details = await res.text().catch(() => "")
+      throw new Error(`Gemma respondio ${res.status}${details ? `: ${details}` : ""}`)
+    }
     const data = await res.json()
-    return data?.response ?? null
-  } catch {
-    return null
-  }
-}
-
-async function tryAbacus(prompt: string): Promise<string | null> {
-  const key = process.env.ABACUSAI_API_KEY
-  if (!key) return null
-  try {
-    const res = await fetch("https://apps.abacus.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: "gpt-5.4-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 2500,
-      }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.choices?.[0]?.message?.content ?? null
-  } catch {
-    return null
+    const response = data?.response
+    if (typeof response !== "string" || !response.trim()) {
+      throw new Error("Gemma devolvio una respuesta vacia")
+    }
+    return response
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Gemma no respondio antes del timeout de ${Math.round(GEMMA_TIMEOUT_MS / 1000)}s usando ${GEMMA_MODEL} en ${GEMMA_URL}`)
+    }
+    throw error
   }
 }
 
@@ -288,13 +279,17 @@ export async function generateQuestions(
   let feedback = ""
   let lastError = ""
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS && accepted.length < safeCount; attempt += 1) {
+  const maxAttempts = Math.max(MAX_ATTEMPTS, safeCount * 2)
+
+  for (let attempt = 1; attempt <= maxAttempts && accepted.length < safeCount; attempt += 1) {
     const missing = safeCount - accepted.length
-    const prompt = buildPrompt(topic, missing, safeDifficulty, safeTypes, options, accepted, feedback)
-    let raw = await tryGemma(prompt)
-    if (!raw) raw = await tryAbacus(prompt)
-    if (!raw) {
-      lastError = "No se pudo generar preguntas (Gemma y fallback no disponibles)"
+    const batchCount = Math.min(missing, GEMMA_BATCH_SIZE)
+    const prompt = buildPrompt(topic, batchCount, safeDifficulty, safeTypes, options, accepted, feedback)
+    let raw = ""
+    try {
+      raw = await requestGemma(prompt)
+    } catch (error: any) {
+      lastError = `No se pudo generar preguntas con Gemma (${GEMMA_MODEL} en ${GEMMA_URL}): ${error?.message ?? "error desconocido"}`
       continue
     }
 

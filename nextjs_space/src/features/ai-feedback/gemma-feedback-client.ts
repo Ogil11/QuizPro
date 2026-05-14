@@ -2,7 +2,8 @@ import { IntelligentFeedbackSchema, type AttemptForFeedback, type IntelligentFee
 import { buildPedagogicalPayload } from "./analyze-attempt"
 
 const GEMMA_URL = process.env.GEMMA_API_URL ?? "http://localhost:11434"
-const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma4:e4b"
+const GEMMA_MODEL = process.env.GEMMA_MODEL ?? "gemma3:4b"
+const GEMMA_TIMEOUT_MS = Number(process.env.GEMMA_TIMEOUT_MS) || 60000
 const MAX_GENERATION_ATTEMPTS = 2
 
 type FeedbackQualityResult = {
@@ -419,7 +420,7 @@ ${JSON.stringify(payload, null, 2)}`
 
 async function requestGemmaFeedback(prompt: string) {
   const ctrl = new AbortController()
-  const timeout = setTimeout(() => ctrl.abort(), 30000)
+  const timeout = setTimeout(() => ctrl.abort(), GEMMA_TIMEOUT_MS)
   try {
     const res = await fetch(`${GEMMA_URL}/api/generate`, {
       method: "POST",

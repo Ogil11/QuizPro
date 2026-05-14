@@ -90,7 +90,7 @@ QuizPro es una aplicación web basada en **Next.js** con las siguientes capacida
 | **Autenticación** | NextAuth v4 con JWT |
 | **Backend** | Next.js API Routes, Roble (backend externo) |
 | **Base de Datos** | PostgreSQL, Prisma ORM |
-| **IA** | Ollama/Gemma, Abacus AI |
+| **IA** | Ollama/Gemma |
 | **Componentes UI** | Lucide React Icons, Sonner Toasts |
 | **Gestión de Estado** | React Context, NextAuth Session |
 
@@ -141,9 +141,7 @@ ROBLE_ATTEMPT_TABLE=QuizAttempt
 DATABASE_URL=postgresql://usuario:contraseña@localhost:5432/quizpro_db
 
 GEMMA_API_URL=http://localhost:11434
-GEMMA_MODEL=gemma2:4b
-
-ABACUSAI_API_KEY=
+GEMMA_MODEL=gemma3:4b
 ```
 
 #### explicación de variables
@@ -154,7 +152,6 @@ ABACUSAI_API_KEY=
 - `ROBLE_QUIZ_TABLE`, `ROBLE_QUESTION_TABLE`, `ROBLE_ATTEMPT_TABLE`: nombres de tablas lógicas en Roble.
 - `DATABASE_URL`: cadena de conexión a PostgreSQL cuando se use Prisma.
 - `GEMMA_API_URL`, `GEMMA_MODEL`: configuración para uso de modelos locales (Ollama).
-- `ABACUSAI_API_KEY`: clave para Abacus (opcional, fallback de IA).
 
 ### Paso 4: configurar la base de datos (opcional)
 
@@ -171,7 +168,7 @@ Para operar modelos locales mediante Ollama:
 
 ```bash
 ollama serve
-ollama pull gemma2:4b
+ollama pull gemma3:4b
 ```
 
 Ejecute `ollama serve` en una terminal y, en otra, descargue el modelo necesario.
