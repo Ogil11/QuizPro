@@ -72,10 +72,7 @@ export default function Profile() {
           )}
         </div>
 
-        <div className="bg-primary/5 p-6 rounded-lg shadow-sm border border-primary/20">
-          <div className="flex items-center gap-2 mb-1"><Sparkles className="h-4 w-4 text-primary"/><h3 className="font-display font-semibold">Retroalimentación IA personalizada</h3></div>
-          <p className="text-sm text-muted-foreground">Análisis profundo de tus debilidades y temas a reforzar.<br/><span className="text-xs italic">TODO — feature/ai-feedback (Oscar): integración con Gemma 4 vía streaming.</span></p>
-        </div>
+        
       </main>
     </div>
   )

@@ -7,6 +7,7 @@ Carga de contenido para alimentar el motor RAG con Roble + Ollama.
 - `GET /api/documents`: lista documentos del usuario autenticado.
 - `POST /api/documents` con JSON `{ "url": "https://..." }`: extrae texto de URLs HTML, texto o PDF.
 - `POST /api/documents` con `multipart/form-data` campo `file`: extrae texto de `.txt`, `.md`, `.csv`, `.json`, `.html` y `.pdf`.
+- `DELETE /api/documents` con JSON `{ "id": "[documentId]" }`: elimina un documento del usuario autenticado y sus chunks RAG.
 - Persiste `Document` en Roble con `extractedText`.
 - Llama a `processDocument()` para chunking, embeddings y guardado en `DocumentChunk`.
 

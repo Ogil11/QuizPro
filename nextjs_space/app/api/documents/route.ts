@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { robleDbInsert, robleDbRead } from "@/src/features/auth/roble-client"
+import { robleDbDelete, robleDbInsert, robleDbRead } from "@/src/features/auth/roble-client"
 import contentExtractor from "@/src/features/content-upload/extract"
-import { processDocument } from "@/src/features/rag-engine"
+import { deleteDocumentChunks, processDocument } from "@/src/features/rag-engine"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -48,6 +48,69 @@ export async function GET() {
   }
 
   return NextResponse.json({ documents: docsResult.rows ?? [] })
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await getAuth()
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
+    const { id } = await req.json().catch(() => ({}))
+    const documentId = typeof id === "string" ? id.trim() : ""
+
+    if (!documentId) {
+      return NextResponse.json({ error: "Document id is required" }, { status: 400 })
+    }
+
+    const docsResult = await robleDbRead({
+      tableName: "Document",
+      token: auth.accessToken,
+      where: { _id: documentId },
+    })
+
+    if (!docsResult.success) {
+      return NextResponse.json(
+        { error: "Document read failed", message: docsResult.error },
+        { status: docsResult.status ?? 500 }
+      )
+    }
+
+    const document = (docsResult.rows ?? []).find((doc: any) => String(doc._id || doc.id || "") === documentId)
+    if (!document) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
+    }
+
+    if (String(document.userId || document.user_id || "") !== auth.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const deletedChunks = await deleteDocumentChunks(documentId, auth.accessToken)
+    const deleteResult = await robleDbDelete({
+      tableName: "Document",
+      token: auth.accessToken,
+      where: { _id: documentId },
+    })
+
+    if (!deleteResult.success) {
+      return NextResponse.json(
+        { error: "Document delete failed", message: deleteResult.error },
+        { status: deleteResult.status ?? 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true, deletedChunks })
+  } catch (error: any) {
+    console.error("[documents:delete] Error:", error)
+    return NextResponse.json(
+      {
+        error: "Document delete failed",
+        message: error?.message || "Unknown error",
+      },
+      { status: 500 }
+    )
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -133,8 +196,10 @@ async function sourceFromFormData(req: NextRequest) {
     throw new Error("Multipart upload requires a 'file' field")
   }
 
+  const isImage = file.type?.startsWith("image/")
+
   return {
-    kind: "file" as const,
+    kind: isImage ? ("image" as const) : ("file" as const),
     fileName: file.name || "uploaded-document",
     contentType: file.type || undefined,
     buffer: Buffer.from(await file.arrayBuffer()),
