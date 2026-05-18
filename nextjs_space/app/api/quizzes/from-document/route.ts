@@ -6,8 +6,6 @@ import { generateQuestions } from "@/src/features/quiz-manager/gemma-client"
 
 export const dynamic = "force-dynamic"
 
-const ALLOWED_DIFFICULTIES = new Set(["easy", "medium", "hard"])
-
 export async function POST(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions)
@@ -31,13 +29,6 @@ export async function POST(req: NextRequest) {
         if (!documentId) {
             return NextResponse.json(
                 { error: "documentId requerido" },
-                { status: 400 }
-            )
-        }
-
-        if (!ALLOWED_DIFFICULTIES.has(String(difficulty))) {
-            return NextResponse.json(
-                { error: 'difficulty invalido. Usa "easy", "medium" o "hard"' },
                 { status: 400 }
             )
         }

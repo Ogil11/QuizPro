@@ -14,7 +14,7 @@ export function AuthLayout({
 }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 hero-gradient">
-      <Card className={cn('w-full max-w-md shadow-lg neo-panel reveal-up', className)}>
+      <Card className={cn('w-full max-w-md shadow-lg', className)}>
         <CardHeader className="text-center">
           <CardTitle className="font-display text-2xl tracking-tight">{title}</CardTitle>
           {description && (

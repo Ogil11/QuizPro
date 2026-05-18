@@ -16,7 +16,6 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  Trash2,
 } from "lucide-react"
 import { Navbar } from "@/src/shared/navbar"
 import { Button } from "@/components/ui/button"
@@ -70,7 +69,6 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [deletingId, setDeletingId] = useState("")
   const [url, setUrl] = useState("")
   const [query, setQuery] = useState("")
 
@@ -142,35 +140,6 @@ export default function DocumentsPage() {
     }
   }
 
-  async function deleteDocument(doc: DocumentRow) {
-    const id = documentId(doc)
-    if (!id) {
-      toast.error("No se pudo identificar el documento")
-      return
-    }
-
-    const confirmed = window.confirm(`Eliminar "${doc.name || "Documento"}"? Esta accion no se puede deshacer.`)
-    if (!confirmed) return
-
-    setDeletingId(id)
-    try {
-      const res = await fetch("/api/documents", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      })
-      const data = await readJsonResponse(res)
-      if (!res.ok) throw new Error(data?.message || data?.error || "No se pudo eliminar el documento")
-
-      setDocuments((current) => current.filter((item) => documentId(item) !== id))
-      toast.success("Documento eliminado")
-    } catch (error: any) {
-      toast.error(error?.message || "No se pudo eliminar el documento")
-    } finally {
-      setDeletingId("")
-    }
-  }
-
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setDragging(false)
@@ -226,8 +195,9 @@ export default function DocumentsPage() {
             }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
-            className={`min-h-[220px] rounded-lg border border-dashed bg-card p-6 shadow-sm transition-colors ${dragging ? "border-primary bg-primary/5" : "border-border"
-              }`}
+            className={`min-h-[220px] rounded-lg border border-dashed bg-card p-6 shadow-sm transition-colors ${
+              dragging ? "border-primary bg-primary/5" : "border-border"
+            }`}
           >
             <div className="flex h-full flex-col items-center justify-center text-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -235,13 +205,13 @@ export default function DocumentsPage() {
               </div>
               <div>
                 <h2 className="font-display text-xl font-semibold">Subir archivo</h2>
-                <p className="text-sm text-muted-foreground">PDF, TXT, Markdown, CSV, JSON, HTML o Imágenes</p>
+                <p className="text-sm text-muted-foreground">PDF, TXT, Markdown, CSV, JSON o HTML</p>
               </div>
               <input
                 ref={inputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.htm,.jpg,.jpeg,.png,.gif,.webp,text/plain,text/markdown,text/csv,application/json,text/html,application/pdf,image/jpeg,image/png,image/gif,image/webp"
+                accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.htm,text/plain,text/markdown,text/csv,application/json,text/html,application/pdf"
                 onChange={(event) => {
                   const file = event.target.files?.[0]
                   if (file) uploadFile(file)
@@ -335,20 +305,6 @@ export default function DocumentsPage() {
                           </Button>
                         </Link>
                       ) : null}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => deleteDocument(doc)}
-                        disabled={deletingId === documentId(doc)}
-                        aria-label={`Eliminar ${doc.name || "documento"}`}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        {deletingId === documentId(doc) ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
                     </div>
                   </article>
                 )

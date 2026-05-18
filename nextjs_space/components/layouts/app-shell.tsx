@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { PanelLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/theme-toggle'
 
 export function AppShell({
   sidebar,
@@ -54,9 +53,6 @@ export function AppShell({
             <PanelLeft className="h-5 w-5" />
           </Button>
           {header}
-          <div className="ml-auto">
-            <ThemeToggle />
-          </div>
         </header>
 
         {/* Content */}
