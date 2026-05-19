@@ -194,7 +194,19 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   debugLog("GET quiz read start", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere })
   const quizRes = await robleDbRead({ tableName: QUIZ_TABLE, token, where: quizWhere })
   debugLog("GET quiz read result", { paramsId: params.id, tableName: QUIZ_TABLE, where: quizWhere, result: quizRes })
-  if (!quizRes.success) return NextResponse.json({ error: quizRes.error ?? "Error cargando quiz", debug: { tableName: QUIZ_TABLE, where: quizWhere, result: quizRes } }, { status: quizRes.status ?? 500 })
+  if (!quizRes.success) {
+  if (quizRes.status === 401) {
+    return NextResponse.json(
+      { error: "No estás autorizado para eliminar este quiz" },
+      { status: 403 }
+    )
+  }
+
+  return NextResponse.json(
+    { error: "Error cargando quiz" },
+    { status: quizRes.status ?? 500 }
+  )
+}
 
   const quizRows = quizRes.rows ?? []
   debugLog("GET quiz normalized ids", { paramsId: params.id, ids: normalizedIds(quizRows) })
@@ -244,7 +256,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!existing) return NextResponse.json({ error: "No encontrado", debug: { paramsId: params.id, ids: normalizedIds(existingRows) } }, { status: 404 })
   const owner = isCreator(existing, sessionUser)
   debugLog("PATCH ownership check", { paramsId: params.id, ...owner })
-  if (!owner.allowed) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
+  if (!owner.allowed)
+  return NextResponse.json(
+    { error: "No estás autorizado para editar este quiz" },
+    { status: 403 }
+  )
 
   const body = await req.json()
   const { name, description, category, difficulty, isPublic, questions } = body
