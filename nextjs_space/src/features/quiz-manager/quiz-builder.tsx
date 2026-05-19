@@ -2,47 +2,19 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-import {
-  Sparkles,
-  Plus,
-  Trash2,
-  Wand2,
-  PencilLine,
-  Shuffle,
-  Save,
-} from "lucide-react"
-
+import { Sparkles, Plus, Trash2, Wand2, PencilLine, Shuffle, Save } from "lucide-react"
 import { toast } from "sonner"
+import type { QuestionDraft, CreationMode } from "@/lib/types"
 
-import type {
-  QuestionDraft,
-  CreationMode,
-} from "@/lib/types"
+type QuestionType = "single" | "multiple" | "truefalse"
 
-type QuestionType =
-  | "single"
-  | "multiple"
-  | "truefalse"
-
-function emptyQ(
-  type: QuestionType = "single"
-): QuestionDraft {
-
+function emptyQ(type: QuestionType = "single"): QuestionDraft {
   if (type === "truefalse") {
     return {
       type,
@@ -60,531 +32,239 @@ function emptyQ(
   }
 }
 
-function normalizeQuestion(
-  q: QuestionDraft
-): QuestionDraft {
-
+function normalizeQuestion(q: QuestionDraft): QuestionDraft {
   const type: QuestionType =
-    q.type === "multiple" ||
-    q.type === "truefalse"
+    q.type === "multiple" || q.type === "truefalse"
       ? q.type
       : "single"
 
   let options = Array.isArray(q.options)
-    ? q.options.map(o =>
-        String(o ?? "").trim()
-      )
+    ? q.options.map(o => String(o ?? "").trim())
     : []
 
-  let correctAnswers = Array.isArray(
-    q.correctAnswers
-  )
-    ? q.correctAnswers
-        .map(n => Number(n))
-        .filter(n =>
-          !Number.isNaN(n)
-        )
+  let correctAnswers = Array.isArray(q.correctAnswers)
+    ? q.correctAnswers.map(Number).filter(n => !Number.isNaN(n))
     : []
 
   if (type === "truefalse") {
+    options = ["Verdadero", "Falso"]
+    correctAnswers = correctAnswers.length > 0 && correctAnswers[0] <= 1 ? [correctAnswers[0]] : [0]
+  }
 
-    options = [
-      "Verdadero",
-      "Falso",
-    ]
-
-    correctAnswers =
-      correctAnswers.length > 0 &&
-      correctAnswers[0] <= 1
-        ? [correctAnswers[0]]
-        : [0]
+  if (type === "single" || type === "multiple") {
+    while (options.length < 4) options.push("")
+    options = options.slice(0, 4)
   }
 
   if (type === "single") {
-
-    while (options.length < 4) {
-      options.push("")
-    }
-
-    options = options.slice(0, 4)
-
-    correctAnswers =
-      correctAnswers.length > 0
-        ? [correctAnswers[0]]
-        : []
+    correctAnswers = correctAnswers.length > 0 ? [correctAnswers[0]] : []
   }
 
   if (type === "multiple") {
-
-    while (options.length < 4) {
-      options.push("")
-    }
-
-    options = options.slice(0, 4)
-
-    correctAnswers = [
-      ...new Set(correctAnswers),
-    ]
+    correctAnswers = [...new Set(correctAnswers)]
   }
 
-  return {
-    ...q,
-    type,
-    options,
-    correctAnswers,
-  }
+  return { ...q, type, options, correctAnswers }
 }
 
-export function QuizBuilder({
-  initial,
-  quizId,
-}: {
-  initial?: any
-  quizId?: string
-}) {
-
+export function QuizBuilder({ initial, quizId }: { initial?: any; quizId?: string }) {
   const router = useRouter()
 
-  const [mode, setMode] =
-    useState<CreationMode>(
-      initial?.creationMode ?? "manual"
-    )
+  const [mode, setMode] = useState<CreationMode>(initial?.creationMode ?? "manual")
+  const [name, setName] = useState(initial?.name ?? "")
+  const [description, setDescription] = useState(initial?.description ?? "")
+  const [category, setCategory] = useState(initial?.category ?? "General")
+  const [difficulty, setDifficulty] = useState(initial?.difficulty ?? "medium")
+  const [isPublic, setIsPublic] = useState(initial?.isPublic ?? true)
 
-  const [name, setName] =
-    useState(initial?.name ?? "")
+  const [questions, setQuestions] = useState<QuestionDraft[]>(() => {
+    const raw = initial?.questions ?? [emptyQ()]
+    return raw.map(normalizeQuestion)
+  })
 
-  const [description, setDescription] =
-    useState(
-      initial?.description ?? ""
-    )
+  const [aiTopic, setAiTopic] = useState("")
+  const [aiCount, setAiCount] = useState(5)
+  const [aiUseRag, setAiUseRag] = useState(true)
 
-  const [category, setCategory] =
-    useState(
-      initial?.category ?? "General"
-    )
+  const [documents, setDocuments] = useState<any[]>([])
+  const [selectedDocument, setSelectedDocument] = useState("")
 
-  const [difficulty, setDifficulty] =
-    useState(
-      initial?.difficulty ?? "medium"
-    )
-
-  const [isPublic, setIsPublic] =
-    useState(
-      initial?.isPublic ?? true
-    )
-
-  const [questions, setQuestions] =
-    useState<QuestionDraft[]>(() => {
-
-      const raw =
-        initial?.questions ??
-        [emptyQ()]
-
-      return raw.map(
-        normalizeQuestion
-      )
-    })
-
-  const [aiTopic, setAiTopic] =
-    useState("")
-
-  const [aiCount, setAiCount] =
-    useState(10)
-
-  const [aiUseRag, setAiUseRag] =
-    useState(true)
-
-  const [documents, setDocuments] =
-    useState<any[]>([])
-
-  const [selectedDocument, setSelectedDocument] =
-    useState("")
-
-  const [busy, setBusy] =
-    useState(false)
-
-  const [saving, setSaving] =
-    useState(false)
+  const [busy, setBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-
     async function loadDocuments() {
-
       try {
-
-        const res = await fetch(
-          "/api/documents"
-        )
-
-        if (!res.ok) {
-          throw new Error()
-        }
-
-        const data =
-          await res.json()
-
-        setDocuments(
-          data.documents ?? []
-        )
-
+        const res = await fetch("/api/documents")
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        setDocuments(data.documents ?? [])
       } catch {
-
         setDocuments([])
-
-        toast.error(
-          "No se pudieron cargar los documentos"
-        )
+        toast.error("No se pudieron cargar los documentos")
       }
     }
 
     loadDocuments()
-
   }, [])
 
-  function updateQ(
-    i: number,
-    patch: Partial<QuestionDraft>
-  ) {
+  function updateQ(i: number, patch: Partial<QuestionDraft>) {
+    setQuestions(qs =>
+      qs.map((q, idx) =>
+        idx === i ? normalizeQuestion({ ...q, ...patch }) : q
+      )
+    )
+  }
 
+  function changeType(i: number, type: QuestionType) {
+    setQuestions(qs => qs.map((q, idx) => idx === i ? emptyQ(type) : q))
+  }
+
+  function setOption(i: number, j: number, value: string) {
     setQuestions(qs =>
       qs.map((q, idx) =>
         idx === i
-          ? normalizeQuestion({
-              ...q,
-              ...patch,
-            })
+          ? { ...q, options: q.options.map((o, k) => k === j ? value : o) }
           : q
       )
     )
   }
 
-  function changeType(
-    i: number,
-    type: QuestionType
-  ) {
-
-    setQuestions(qs =>
-      qs.map((q, idx) =>
-        idx === i
-          ? emptyQ(type)
-          : q
-      )
-    )
-  }
-
-  function setOption(
-    i: number,
-    j: number,
-    value: string
-  ) {
-
+  function toggleCorrect(i: number, j: number) {
     setQuestions(qs =>
       qs.map((q, idx) => {
+        if (idx !== i) return q
 
-        if (idx !== i) {
-          return q
+        if (q.type === "single" || q.type === "truefalse") {
+          return { ...q, correctAnswers: [j] }
         }
+
+        const has = q.correctAnswers.includes(j)
 
         return {
           ...q,
-          options: q.options.map(
-            (o, k) =>
-              k === j
-                ? value
-                : o
-          ),
-        }
-      })
-    )
-  }
-
-  function toggleCorrect(
-    i: number,
-    j: number
-  ) {
-
-    setQuestions(qs =>
-      qs.map((q, idx) => {
-
-        if (idx !== i) {
-          return q
-        }
-
-        if (
-          q.type === "single" ||
-          q.type === "truefalse"
-        ) {
-
-          return {
-            ...q,
-            correctAnswers: [j],
-          }
-        }
-
-        const has =
-          q.correctAnswers.includes(j)
-
-        const updated = has
-          ? q.correctAnswers.filter(
-              x => x !== j
-            )
-          : [
-              ...q.correctAnswers,
-              j,
-            ]
-
-        return {
-          ...q,
-          correctAnswers:
-            updated.sort(),
+          correctAnswers: has
+            ? q.correctAnswers.filter(x => x !== j)
+            : [...q.correctAnswers, j].sort(),
         }
       })
     )
   }
 
   async function generateWithAI() {
-
-    if (
-      !selectedDocument &&
-      !aiTopic.trim()
-    ) {
-
-      toast.error(
-        "Indica un tema o selecciona un documento"
-      )
-
+    if (!selectedDocument && !aiTopic.trim()) {
+      toast.error("Indica tema o selecciona documento")
       return
     }
 
     setBusy(true)
 
     try {
+      const useDocumentFlow = aiUseRag && !!selectedDocument
 
-      const useDocumentFlow =
-        aiUseRag &&
-        !!selectedDocument
+      const endpoint = useDocumentFlow
+        ? "/api/quizzes/from-document"
+        : "/api/quizzes/generate"
 
-      const endpoint =
-        useDocumentFlow
-          ? "/api/quizzes/from-document"
-          : "/api/quizzes/generate"
+      const body = useDocumentFlow
+        ? {
+            documentId: selectedDocument,
+            count: aiCount,
+            difficulty,
+          }
+        : {
+            topic: aiTopic.trim(),
+            count: aiCount,
+            difficulty,
+            useRag: aiUseRag,
+          }
 
-      const body =
-        useDocumentFlow
-          ? {
-              documentId:
-                selectedDocument,
-              count: aiCount,
-              difficulty,
-            }
-          : {
-              topic:
-                aiTopic.trim(),
-              count: aiCount,
-              difficulty,
-              useRag: aiUseRag,
-            }
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
 
-      const res = await fetch(
-        endpoint,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(
-            body
-          ),
-        }
-      )
-
-      const text =
-        await res.text()
-
+      const text = await res.text()
       let data: any = {}
 
       try {
-
-        data = text
-          ? JSON.parse(text)
-          : {}
-
+        data = text ? JSON.parse(text) : {}
       } catch {
-
-        throw new Error(
-          "Respuesta inválida del servidor"
-        )
+        throw new Error("Respuesta inválida del servidor")
       }
 
       if (!res.ok) {
-
-        throw new Error(
-          data?.error ??
-          "Error generando preguntas"
-        )
+        throw new Error(data?.error ?? "Error generando")
       }
 
       const rawQuestions =
-
-        Array.isArray(
-          data?.questions
-        )
+        Array.isArray(data?.questions)
           ? data.questions
-
-          : Array.isArray(
-              data?.preguntas
-            )
+          : Array.isArray(data?.preguntas)
           ? data.preguntas
-
           : []
 
-      const newQuestions =
-        rawQuestions
-          .map(normalizeQuestion)
-          .filter((q: QuestionDraft) =>
-            q.text.trim().length > 0
-          )
+      const newQuestions = rawQuestions
+        .map(normalizeQuestion)
+        .filter((q: QuestionDraft) => q.text.trim())
 
       const detectedCategory =
-
-        typeof data?.category ===
-          "string" &&
-        data.category.trim()
+        typeof data?.category === "string" && data.category.trim()
           ? data.category.trim()
-
-          : typeof data?.categoria ===
-              "string" &&
-            data.categoria.trim()
-          ? data.categoria.trim()
-
           : null
 
       if (detectedCategory) {
-        setCategory(
-          detectedCategory
-        )
+        setCategory(detectedCategory)
       }
 
-      if (
-        newQuestions.length === 0
-      ) {
-
-        toast.error(
-          "Gemma no devolvió preguntas válidas"
-        )
-
+      if (!newQuestions.length) {
+        toast.error("Gemma no devolvió preguntas válidas")
         return
       }
 
       if (mode === "ai") {
-
-        setQuestions(
-          newQuestions
-        )
-
+        setQuestions(newQuestions)
       } else {
-
-        setQuestions(qs => [
-
-          ...qs.filter(q =>
-            q.text.trim()
-          ),
-
-          ...newQuestions,
-        ])
+        setQuestions(qs => [...qs.filter(q => q.text.trim()), ...newQuestions])
       }
 
-      const ragText =
-        data?.rag?.used
-          ? ` usando ${data.rag.chunks} fragmentos RAG`
-          : ""
+      const ragText = data?.rag?.used
+        ? ` con ${data.rag.chunks} fragmentos RAG`
+        : ""
 
-      toast.success(
-        `${newQuestions.length} preguntas generadas${ragText}`
-      )
-
+      toast.success(`${newQuestions.length} preguntas generadas${ragText}`)
     } catch (e: any) {
-
-      toast.error(
-        e?.message ??
-        "Error generando preguntas"
-      )
-
+      toast.error(e?.message ?? "Error generando")
     } finally {
-
       setBusy(false)
     }
   }
 
   async function save() {
-
     if (!name.trim()) {
-
-      toast.error(
-        "Completa el nombre del quiz"
-      )
-
-      return
-    }
-
-    if (
-      questions.length === 0
-    ) {
-
-      toast.error(
-        "Agrega al menos una pregunta"
-      )
-
+      toast.error("Completa el nombre del quiz")
       return
     }
 
     for (const q of questions) {
-
       if (!q.text.trim()) {
-
-        toast.error(
-          "Hay preguntas sin texto"
-        )
-
+        toast.error("Hay preguntas sin texto")
         return
       }
 
-      if (
-        q.options.some(
-          o => !o.trim()
-        )
-      ) {
-
-        toast.error(
-          "Hay opciones vacías"
-        )
-
+      if (q.options.some(o => !o.trim())) {
+        toast.error("Hay opciones vacías")
         return
       }
 
-      if (
-        q.correctAnswers.length === 0
-      ) {
-
-        toast.error(
-          "Hay preguntas sin respuesta correcta"
-        )
-
+      if (q.correctAnswers.length === 0) {
+        toast.error("Hay preguntas sin respuesta correcta")
         return
       }
 
-      if (
-        q.type === "multiple" &&
-        q.correctAnswers.length < 2
-      ) {
-
-        toast.error(
-          "Las preguntas múltiples deben tener al menos 2 respuestas correctas"
-        )
-
+      if (q.type === "multiple" && q.correctAnswers.length < 2) {
+        toast.error("Las múltiples deben tener al menos 2 respuestas")
         return
       }
     }
@@ -592,13 +272,10 @@ export function QuizBuilder({
     setSaving(true)
 
     try {
-
       const payload = {
         name: name.trim(),
-        description:
-          description.trim(),
-        category:
-          category.trim(),
+        description: description.trim(),
+        category: category.trim(),
         difficulty,
         isPublic,
         creationMode: mode,
@@ -606,71 +283,25 @@ export function QuizBuilder({
       }
 
       const res = await fetch(
-
-        quizId
-          ? `/api/quizzes/${quizId}`
-          : "/api/quizzes",
-
+        quizId ? `/api/quizzes/${quizId}` : "/api/quizzes",
         {
-          method:
-            quizId
-              ? "PATCH"
-              : "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(
-            payload
-          ),
+          method: quizId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         }
       )
 
-      const text =
-        await res.text()
-
-      let data: any = {}
-
-      try {
-
-        data = text
-          ? JSON.parse(text)
-          : {}
-
-      } catch {
-
-        data = {}
-      }
-
       if (!res.ok) {
-
-        toast.error(
-          data?.error ??
-          text ??
-          "Error guardando"
-        )
-
+        const text = await res.text()
+        toast.error(text || "Error guardando")
         return
       }
 
-      toast.success(
-        "Quiz guardado"
-      )
-
-      router.replace(
-        "/dashboard"
-      )
-
+      toast.success("Quiz guardado")
+      router.replace("/dashboard")
     } catch {
-
-      toast.error(
-        "Error de conexión"
-      )
-
+      toast.error("Error de conexión")
     } finally {
-
       setSaving(false)
     }
   }
